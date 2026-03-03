@@ -1,0 +1,360 @@
+---
+title: Voice Commands
+description: Track voice channel activity and view leaderboards
+---
+
+The `/voice` (aliased as `/vc`) command group tracks voice channel activity and provides statistics and leaderboards for server members.
+
+<Note>
+  The command uses the alias `/vc` for convenience. Both `/voice` and `/vc` work identically.
+</Note>
+
+## Overview
+
+Voice tracking features:
+- **Automatic tracking**: Records time spent in voice channels
+- **Leaderboards**: Ranked lists by voice activity
+- **Statistics**: Daily activity visualizations and charts
+- **User & server stats**: View individual or server-wide data
+
+---
+
+## Subcommands
+
+### /vc leaderboard
+
+Display a ranked leaderboard of users by total time spent in voice channels.
+
+<ParamField path="time_range" type="choice" default="This month">
+  Time period to filter voice activity:
+  
+  - `Today`: From 00:00 UTC today until now
+  - `Past 24 hours`: Last 24 hours
+  - `Past 72 hours`: Last 72 hours
+  - `Past 7 days`: Last 7 days
+  - `Past 14 days`: Last 14 days
+  - `This month`: From 1st of current month until now
+  - `This year`: From January 1st until now
+  - `All time`: Complete history
+</ParamField>
+
+**Features:**
+
+- **Pagination**: Browse through entries 10 at a time
+- **Your Rank**: Shows your position and total time at the top
+- **Visual Leaderboard**: Generated as an image with rankings
+- **Time Filtering**: Interactive buttons to change time ranges
+- **Real-time Updates**: Click time range buttons to refresh data
+
+**Leaderboard Display:**
+
+Each entry shows:
+- Rank position
+- Username
+- Total voice time (formatted as hours/minutes)
+- Visual ranking indicators
+
+**Usage Examples:**
+
+<CodeGroup>
+```bash Default (This month)
+/vc leaderboard
+```
+
+```bash Past week
+/vc leaderboard time_range:"Past 7 days"
+```
+
+```bash All time leaderboard
+/vc leaderboard time_range:"All time"
+```
+</CodeGroup>
+
+---
+
+### /vc stats
+
+Display detailed voice activity statistics with contribution graphs and charts.
+
+<ParamField path="time_range" type="choice" default="Monthly">
+  Time period and granularity:
+  
+  - `Yearly`: Last 365 days, aggregated by month
+  - `Monthly`: Last ~4 months, aggregated by day
+  - `Weekly`: Last 4 weeks, aggregated by day
+  - `Hourly`: Last 4 days, aggregated by hour
+</ParamField>
+
+<ParamField path="user" type="user">
+  User to show stats for. Defaults vary by context:
+  
+  - **In server**: Shows server-wide stats unless a user is specified
+  - **In DM**: Shows your own stats (cannot view others)
+  
+  <Note>
+    When viewing another user's stats in a server, the bot verifies they are a member.
+  </Note>
+</ParamField>
+
+<ParamField path="statistic" type="choice" default="Average Time">
+  For server-wide view, which statistic to display:
+  
+  - `Average Time`: Average voice time per active user
+  - `Active Users`: Number of unique active users
+  - `Total Time`: Total voice time across all users
+  
+  This parameter is ignored when viewing individual user stats.
+</ParamField>
+
+**Visualizations:**
+
+1. **Contribution Graph**: GitHub-style heatmap showing daily activity
+   - Color intensity represents activity level
+   - Hover/view tooltip-style info (in image)
+
+2. **Line Chart**: Time series graph showing trends
+   - X-axis: Time periods (hours, days, weeks, or months)
+   - Y-axis: Duration or user count depending on stat type
+   - Multiple lines for comparing different time periods
+
+**Interactive Controls:**
+
+- **Time Range Buttons**: `Yearly`, `Monthly`, `Weekly`, `Hourly`
+- **Statistic Buttons** (server view): `Unique Users`, `Total Time`, `Average Time`
+- **User Select**: Dropdown to switch between viewing different users
+- **Toggle Data Mode**: Switch between contribution graph and line chart
+
+**Usage Examples:**
+
+<CodeGroup>
+```bash Your stats (monthly)
+/vc stats
+```
+
+```bash Server stats (weekly, total time)
+/vc stats time_range:Weekly statistic:"Total Time"
+```
+
+```bash Another user's stats
+/vc stats user:@username time_range:Monthly
+```
+
+```bash Hourly breakdown
+/vc stats time_range:Hourly
+```
+</CodeGroup>
+
+**Display Information:**
+
+The stats view shows:
+- Target (username or server name)
+- Selected time range
+- Total voice time in the period
+- Contribution graph or line chart (PNG image)
+
+---
+
+### /vc stats_chart
+
+<Note>
+  This is a specialized subcommand. Details are similar to `/vc stats` but focused on chart generation.
+  See source code at `src/bot/commands/voice/stats_chart.rs` for implementation details.
+</Note>
+
+Generate line charts for voice activity data with customizable time ranges and statistics.
+
+---
+
+### /vc settings
+
+Configure voice tracking settings for the server. **Administrator permissions required.**
+
+<Note>
+  This command requires `ADMINISTRATOR` or `MANAGE_GUILD` permissions.
+</Note>
+
+**Configuration Options:**
+
+1. **Enable/Disable Voice Tracking**
+   - Toggle voice activity tracking on or off
+   - When disabled, the bot stops recording voice channel sessions
+   - Existing data is preserved
+
+**Settings View:**
+
+- Shows current status (active or paused)
+- Toggle button to enable/disable
+- Navigation buttons:
+  - "❮ Back" to return to main settings
+  - "🛈 About" to view bot information
+
+**Usage:**
+
+```bash
+/vc settings
+```
+
+---
+
+## Time Range Options
+
+### Leaderboard Time Ranges
+
+| Option | Description | Calculation |
+|--------|-------------|-------------|
+| Today | Current day | From 00:00 UTC today |
+| Past 24 hours | Last 24 hours | Now - 24 hours |
+| Past 72 hours | Last 3 days | Now - 72 hours |
+| Past 7 days | Last week | Now - 7 days |
+| Past 14 days | Last 2 weeks | Now - 14 days |
+| This month | Current month | From 1st of month 00:00 |
+| This year | Current year | From Jan 1st 00:00 |
+| All time | Complete history | From earliest record |
+
+### Stats Time Ranges
+
+| Option | Duration | Granularity | Use Case |
+|--------|----------|-------------|----------|
+| Yearly | 365 days | Monthly | Long-term trends |
+| Monthly | ~4 months | Daily | Medium-term patterns |
+| Weekly | 4 weeks | Daily | Recent activity |
+| Hourly | 4 days | Hourly | Detailed breakdown |
+
+---
+
+## Statistic Types (Server View)
+
+<Accordion title="Average Time">
+  **Formula**: Total voice time ÷ Number of active users
+  
+  **Use case**: See how engaged the average user is
+  
+  **Calculation**: For each time period, divides total seconds by unique user count
+</Accordion>
+
+<Accordion title="Active Users">
+  **Formula**: Count of unique users with voice activity
+  
+  **Use case**: Track server population and engagement
+  
+  **Calculation**: Counts distinct user IDs with sessions in each period
+</Accordion>
+
+<Accordion title="Total Time">
+  **Formula**: Sum of all voice session durations
+  
+  **Use case**: See overall server voice activity
+  
+  **Calculation**: Aggregates all session durations for each period
+</Accordion>
+
+---
+
+## Permissions
+
+### User Permissions
+
+- **View Leaderboards**: All server members
+- **View Own Stats**: All users (in server or DM)
+- **View Others' Stats**: All server members (only for members of that server)
+
+### Admin Permissions
+
+- `/vc settings`: Requires `ADMINISTRATOR` or `MANAGE_GUILD` permission
+
+---
+
+## Common Workflows
+
+<Accordion title="Setting up voice tracking">
+  1. Server admin runs `/vc settings`
+  2. Ensure voice tracking is enabled
+  3. Bot automatically tracks all voice channel joins/leaves
+  4. Users can view stats immediately (if any activity exists)
+</Accordion>
+
+<Accordion title="Viewing your activity">
+  1. Run `/vc stats` to see your contribution graph
+  2. Change time range with interactive buttons
+  3. Toggle to line chart view for trend analysis
+  4. Compare different time periods
+</Accordion>
+
+<Accordion title="Checking your rank">
+  1. Run `/vc leaderboard`
+  2. Your rank appears at the top
+  3. Scroll through pages to see others
+  4. Change time range to see different rankings
+</Accordion>
+
+<Accordion title="Comparing server activity">
+  1. Run `/vc stats` (without specifying a user)
+  2. View server-wide statistics
+  3. Switch between statistic types:
+     - `Average Time`: User engagement level
+     - `Active Users`: Community size
+     - `Total Time`: Overall activity
+  4. Adjust time ranges to identify trends
+</Accordion>
+
+---
+
+## Technical Details
+
+### Data Collection
+
+- **Session Recording**: Bot records join and leave times for voice channels
+- **Duration Calculation**: `leave_time - join_time` capped at 24 hours max
+- **Active Sessions**: Users still in voice are counted up to current time
+
+### Image Generation
+
+- **Contribution Graphs**: Generated using the `contribution_grid` crate
+- **Line Charts**: Created with the `plotters` crate
+- **File Format**: PNG images attached to Discord messages
+- **Caching**: Generated on-demand per request
+
+### Performance
+
+- **Leaderboard**: Queries limited to `u32::MAX` entries, then paginates client-side
+- **Stats**: Aggregates data before chart generation to reduce memory usage
+- **Timeouts**: Interactive views timeout after 120 seconds of inactivity
+
+---
+
+## Error Messages
+
+<Accordion title="User not in guild">
+  **Error**: "The specified user is not a member of this server."
+  
+  **Cause**: Trying to view stats for a user not in the current server
+  
+  **Solution**: Only view stats for current server members
+</Accordion>
+
+<Accordion title="DM restrictions">
+  **Error**: "In direct messages, you can only view your own voice stats."
+  
+  **Cause**: Attempting to view another user's stats via DM
+  
+  **Solution**: Use the command in a server to view others' stats
+</Accordion>
+
+<Accordion title="Guild only command">
+  **Error**: "This command can only be used in a server."
+  
+  **Cause**: Running `/vc leaderboard` or `/vc settings` in DMs
+  
+  **Solution**: Use these commands in a server channel
+</Accordion>
+
+<Accordion title="No data available">
+  **Info**: Leaderboard or stats show empty/minimal data
+  
+  **Cause**: 
+  - Voice tracking was recently enabled
+  - No voice activity in the selected time range
+  - Users haven't joined voice channels
+  
+  **Solution**: Wait for activity to accumulate, or adjust time range
+</Accordion>

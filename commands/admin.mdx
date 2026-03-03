@@ -1,0 +1,549 @@
+---
+title: Admin Commands
+description: Administrative and utility commands for bot management
+---
+
+Admin commands provide essential utilities for bot owners and server administrators to manage the bot, view information, and perform maintenance tasks.
+
+## Overview
+
+These commands fall into several categories:
+- **Information**: Display bot statistics and details
+- **Command Management**: Register/unregister slash commands
+- **Owner Utilities**: Database operations and owner-specific tools
+- **Welcome Configuration**: Set up welcome cards for new members
+
+---
+
+## User Commands
+
+### /about
+
+Display comprehensive information about the bot including statistics, links, and version information.
+
+**Permissions**: Available to all users
+
+**Usage:**
+```bash
+/about
+```
+
+**Information Displayed:**
+
+<Accordion title="Statistics">
+  - **Uptime**: How long the bot has been running (days, hours, minutes)
+  - **Servers**: Number of servers the bot is in (formatted with k/M suffixes)
+  - **Users**: Total user count across all servers
+  - **Commands**: Total number of registered commands (including subcommands)
+  - **Latency**: Current Discord API latency in milliseconds
+  - **Memory**: Bot process memory usage in MB
+</Accordion>
+
+<Accordion title="Information">
+  - **Author**: [FAZuH](https://github.com/FAZuH)
+  - **Source**: [GitHub Repository](https://github.com/FAZuH/pwr-bot)
+  - **License**: [MIT](https://github.com/FAZuH/pwr-bot/blob/main/LICENSE)
+  - **Copyright**: © 2025-{current_year} FAZuH
+  - **Version**: Current bot version from config
+</Accordion>
+
+**Display Features:**
+- Bot avatar thumbnail
+- Clickable links to source code and license
+- "< Back" button (when accessed from settings)
+- Auto-refresh capability via controller navigation
+
+**Navigation:**
+- From main settings: Click "🛈 About"
+- Returns to settings when clicking "< Back"
+
+**Implementation Details:**
+
+Location: `src/bot/commands/about.rs`
+
+The command gathers real-time statistics:
+- Uptime from bot start time
+- Server/user counts from Discord cache
+- API latency via test request
+- Memory from system process info
+
+---
+
+### /welcome
+
+Configure customizable welcome cards for new server members.
+
+**Permissions**: Server administrator recommended (though not explicitly enforced at command level)
+
+**Usage:**
+```bash
+/welcome
+```
+
+**Configuration Options:**
+
+<ParamField path="Enable/Disable" type="toggle">
+  Toggle welcome cards on or off for the server.
+  
+  - **Enabled**: New members receive welcome cards
+  - **Disabled**: No welcome cards are sent
+</ParamField>
+
+<ParamField path="Welcome Channel" type="channel" required>
+  Select the text channel where welcome cards will be posted.
+  
+  Must be a text channel. Required for welcome cards to function.
+</ParamField>
+
+<ParamField path="Template" type="select">
+  Choose from 12 pre-designed welcome card templates.
+  
+  - Templates numbered 1-12
+  - Visual preview available via "Preview Templates" link
+  - Default: Template 1
+</ParamField>
+
+<ParamField path="Primary Color" type="modal">
+  Set the accent color for the welcome card.
+  
+  - Format: Hex color code (e.g., `#5865F2`)
+  - Opened via "Set Color" button
+  - Must include `#` prefix
+</ParamField>
+
+<ParamField path="Welcome Messages" type="list">
+  Manage a list of welcome messages (max 25).
+  
+  - Messages are randomly selected when welcoming members
+  - Support template variables (see below)
+  - Max 200 characters per message
+  - Add via "Add Message" button (modal input)
+  - Remove via select menu + "Save Removals"
+</ParamField>
+
+**Template Variables:**
+
+Use these variables in welcome messages:
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `{{ username }}` | User's display name | "JohnDoe" |
+| `{{ user_tag }}` | User's handle | "@johndoe" |
+| `{{ server_name }}` | Server name | "My Awesome Server" |
+| `{{ member_count }}` | Total members | "1,234" |
+| `{{ member_number }}` | Join position | "#1234" |
+| `{{ primary_color }}` | Accent color | "#5865F2" |
+| `{{ welcome_message }}` | Your greeting | Selected message |
+
+**Example Message:**
+```
+Welcome to {{ server_name }}, {{ user_tag }}! You are member {{ member_number }}!
+```
+
+**Preview Generation:**
+
+When enabled, a preview image is generated showing:
+- Selected template design
+- Placeholder user data
+- Your configured colors and messages
+- Updated in real-time as settings change
+
+**Message Management:**
+
+1. **Adding Messages**:
+   - Click "Add Message" button
+   - Modal appears with text input
+   - Enter message (1-200 chars)
+   - Message added to list
+
+2. **Removing Messages**:
+   - Select messages in dropdown (multi-select)
+   - Selected messages marked with ❌
+   - Click "Save Removals" to confirm
+   - Or "Cancel" to undo selection
+
+**Navigation:**
+- "❮ Back": Return to main settings
+- "🛈 About": View bot information
+- "Preview Templates": Opens GitHub link with template previews
+
+**Image Attachments:**
+- Preview image: `welcome_preview.png`
+- Attached to message when welcome is enabled
+- Regenerated after each settings change
+
+---
+
+## Server Admin Commands
+
+### /register
+
+Register all bot slash commands to the current server.
+
+**Permissions**: Server administrator required
+
+**Usage:**
+```bash
+/register
+```
+
+<Note>
+  This is a prefix command (not a slash command). You must type it with the bot's prefix in a text channel.
+</Note>
+
+**What it does:**
+1. Checks user has administrator permissions
+2. Creates Discord command registration payload
+3. Registers all commands to the current guild
+4. Shows progress during registration
+5. Displays completion time and command count
+
+**Display:**
+
+**During registration:**
+```
+### Registering Commands
+Registering {N} server commands...
+```
+
+**After completion:**
+```
+### Command Registration Complete
+Successfully registered {N} commands in {time}ms
+```
+
+**Use Cases:**
+- First-time bot setup in a server
+- After bot updates that add new commands
+- If commands aren't appearing in Discord
+- Troubleshooting command visibility issues
+
+**Implementation:**
+
+Location: `src/bot/commands/register.rs`
+
+---
+
+### /unregister
+
+Remove all bot slash commands from the current server.
+
+**Permissions**: Server administrator required
+
+**Usage:**
+```bash
+/unregister
+```
+
+<Note>
+  This is a prefix command (not a slash command). Type it with the bot's prefix.
+</Note>
+
+**What it does:**
+1. Checks user has administrator permissions
+2. Clears all guild commands (sets to empty array)
+3. Shows progress during removal
+4. Displays completion time
+
+**Display:**
+
+**During unregistration:**
+```
+### Unregistering Commands
+Unregistering all server commands...
+```
+
+**After completion:**
+```
+### Command Unregistration Complete
+Successfully unregistered all commands in {time}ms
+```
+
+**Use Cases:**
+- Removing bot commands before removing the bot
+- Cleaning up command clutter
+- Troubleshooting command issues
+- Switching to global commands only
+
+**Warning**: After unregistering, you'll need to run `/register` again to restore commands.
+
+**Implementation:**
+
+Location: `src/bot/commands/unregister.rs`
+
+---
+
+## Owner-Only Commands
+
+<Note>
+  The following commands can only be used by bot owners specified in the bot configuration.
+</Note>
+
+### /register_owner
+
+Register bot commands globally (owner version with UI selection).
+
+**Permissions**: Bot owner only (via `owners_only` check)
+
+**Usage:**
+```bash
+/register_owner
+```
+
+<Note>
+  This is a prefix command. It's hidden from help menus.
+</Note>
+
+**What it does:**
+- Provides an interactive UI for command registration
+- Uses Poise's built-in registration buttons
+- Allows registering commands globally or per-guild
+- More flexible than `/register` for development/testing
+
+**Use Cases:**
+- Global command registration
+- Development and testing
+- Switching between global and guild commands
+- Fine-grained control over command deployment
+
+**Implementation:**
+
+Location: `src/bot/commands/register_owner.rs`
+
+Uses: `poise::builtins::register_application_commands_buttons()`
+
+---
+
+### /dump_db
+
+Export complete database contents as JSON files.
+
+**Permissions**: Bot owner only
+
+**Usage:**
+```bash
+/dump_db
+```
+
+<Note>
+  This is a prefix command. It's hidden from help menus.
+</Note>
+
+**What it does:**
+1. Queries all data from database tables
+2. Serializes data to pretty-printed JSON
+3. Attaches files to a Discord message
+
+**Exported Files:**
+
+1. **feeds.json**: All registered RSS feeds
+   - Feed metadata
+   - Source URLs
+   - Platform information
+
+2. **feed_versions.json**: Feed item history
+   - Individual feed items/versions
+   - Publication timestamps
+   - Item content
+
+3. **subscribers.json**: All subscription targets
+   - User and guild subscribers
+   - Subscriber types and IDs
+
+4. **subscriptions.json**: Active subscriptions
+   - Links between subscribers and feeds
+   - Subscription metadata
+
+**Use Cases:**
+- Database backups
+- Data migration
+- Debugging subscription issues
+- Analytics and reporting
+- Disaster recovery
+
+**Security Considerations:**
+
+<Warning>
+  The database dump contains sensitive information:
+  - User IDs and guild IDs
+  - Subscription relationships
+  - Internal database structure
+  
+  Only use this command in secure, private channels. Never share dumps publicly.
+</Warning>
+
+**Implementation:**
+
+Location: `src/bot/commands/dump_db.rs`
+
+---
+
+## Permission Levels
+
+### Public Commands
+
+✅ All users can access:
+- `/about` - Bot information
+
+### Server Administrator
+
+🔒 Requires admin permissions:
+- `/register` - Register server commands
+- `/unregister` - Remove server commands
+- `/settings` - Configure bot features (including welcome via settings UI)
+
+### Bot Owner Only
+
+🔐 Restricted to bot owners:
+- `/register_owner` - Owner registration UI
+- `/dump_db` - Database export
+
+---
+
+## Common Workflows
+
+<Accordion title="Setting up bot in a new server">
+  1. Server admin runs `/register` to enable slash commands
+  2. Admin runs `/settings` to configure features
+  3. Enable desired features (Feeds, Voice, Welcome)
+  4. Configure each feature:
+     - Set required channels
+     - Configure permissions
+     - Test functionality
+  5. Announce available commands to members
+</Accordion>
+
+<Accordion title="Configuring welcome cards">
+  1. Admin runs `/settings`
+  2. Enable "Welcome" feature if not active
+  3. Click "Welcome" to open configuration
+  4. Set welcome channel (required)
+  5. Choose a template (1-12)
+  6. Set primary color (optional)
+  7. Add welcome messages with template variables
+  8. Preview the card design
+  9. Enable welcome cards
+  10. Test by having a user join (or leave and rejoin)
+</Accordion>
+
+<Accordion title="Backing up bot data">
+  1. Bot owner runs `/dump_db` in a secure channel
+  2. Download all attached JSON files
+  3. Store securely (encrypted storage recommended)
+  4. Document backup date and bot version
+  5. Regular backups recommended (weekly/monthly)
+</Accordion>
+
+<Accordion title="Troubleshooting commands not appearing">
+  1. Verify bot has necessary permissions in the server
+  2. Run `/unregister` to clear existing commands
+  3. Wait a few seconds
+  4. Run `/register` to re-register commands
+  5. Restart Discord client if commands still don't appear
+  6. Check bot logs for registration errors
+</Accordion>
+
+---
+
+## Error Handling
+
+<Accordion title="Permission denied">
+  **Error**: Permission check failures
+  
+  **Commands affected**: `/register`, `/unregister`, `/settings`
+  
+  **Solution**: User must have server administrator permissions
+</Accordion>
+
+<Accordion title="Guild only command">
+  **Error**: `BotError::GuildOnlyCommand`
+  
+  **Commands affected**: `/register`, `/unregister`, `/settings`, `/welcome`
+  
+  **Solution**: Run the command in a server channel, not DMs
+</Accordion>
+
+<Accordion title="Owner only command">
+  **Error**: `owners_only` check failure
+  
+  **Commands affected**: `/register_owner`, `/dump_db`
+  
+  **Solution**: Only bot owners can use these commands
+</Accordion>
+
+<Accordion title="Invalid color format">
+  **Error**: Color doesn't start with '#'
+  
+  **Command**: `/welcome` color setting
+  
+  **Solution**: Enter hex color with '#' prefix (e.g., `#5865F2`)
+</Accordion>
+
+---
+
+## Technical Details
+
+### Command Types
+
+**Slash Commands:**
+- `/about`: Standard slash command
+- `/welcome`: Slash command with modal interactions
+
+**Prefix Commands:**
+- `/register`: Requires typing with bot prefix
+- `/unregister`: Requires typing with bot prefix  
+- `/register_owner`: Owner-only prefix command
+- `/dump_db`: Owner-only prefix command
+
+### Statistics Collection
+
+The `/about` command gathers live statistics:
+
+```rust
+// Uptime
+let uptime = start_time.elapsed();
+
+// Server count
+let guild_count = ctx.cache().guilds().len();
+
+// User count (sum across all cached guilds)
+let user_count: usize = ctx.cache()
+    .guilds()
+    .iter()
+    .filter_map(|guild_id| {
+        ctx.cache()
+            .guild(*guild_id)
+            .map(|guild| guild.member_count as usize)
+    })
+    .sum();
+
+// Latency (via HTTP request)
+let start = Instant::now();
+ctx.http().get_current_user().await?;
+let latency_ms = start.elapsed().as_millis() as u64;
+
+// Memory usage
+use sysinfo::System;
+let process_memory_mb = process.memory() / (1024 * 1024);
+```
+
+### Welcome Card Generation
+
+Location: `src/bot/commands/welcome/image_generator.rs`
+
+**Process:**
+1. Fetch template design by ID (1-12)
+2. Replace template variables in messages
+3. Download/cache user avatar
+4. Composite text and images
+5. Apply primary color to accents
+6. Export as PNG
+
+**Preview vs. Real:**
+- **Preview**: Uses placeholder data ("PreviewUser", "#100", etc.)
+- **Real**: Uses actual member data when user joins
+
+**Caching:**
+- Templates are loaded once and reused
+- Avatar images cached per user
+- Preview regenerated on settings changes

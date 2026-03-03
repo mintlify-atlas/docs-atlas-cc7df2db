@@ -1,0 +1,283 @@
+---
+title: Development Overview
+description: Setup your development environment and start contributing to pwr-bot
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+<Steps>
+  <Step title="Rust toolchain">
+    Install Rust 2024 edition or later:
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    rustup default nightly
+    ```
+  </Step>
+  
+  <Step title="SQLite">
+    Install SQLite for local database development:
+    ```bash
+    # macOS
+    brew install sqlite
+    
+    # Ubuntu/Debian
+    sudo apt-get install sqlite3 libsqlite3-dev
+    ```
+  </Step>
+  
+  <Step title="SQLx CLI">
+    Install SQLx CLI for database migrations:
+    ```bash
+    cargo install sqlx-cli --no-default-features --features sqlite
+    ```
+  </Step>
+</Steps>
+
+## Development Workflow
+
+### Using dev.sh
+
+The `dev.sh` script provides convenient commands for common development tasks:
+
+<CodeGroup>
+```bash Format code
+./dev.sh format
+```
+
+```bash Run linter
+./dev.sh lint
+```
+
+```bash Run tests
+./dev.sh test
+```
+
+```bash Build Docker image
+./dev.sh build
+```
+
+```bash Run all checks
+./dev.sh all
+```
+</CodeGroup>
+
+<Info>
+  The `format` command uses `cargo +nightly fmt` and `lint` runs `cargo clippy` with auto-fix enabled.
+</Info>
+
+### Standard Cargo Commands
+
+You can also use standard Cargo commands:
+
+```bash
+# Build the project
+cargo build
+
+# Run the bot
+cargo run
+
+# Run tests (requires SQLX_OFFLINE=true in CI)
+cargo test --all-features
+
+# Check for errors without building
+cargo check
+```
+
+## Code Style Guidelines
+
+### Import Organization
+
+Imports should be grouped in the following order (enforced by `rustfmt.toml`):
+
+```rust
+// 1. Standard library
+use std::sync::Arc;
+use std::time::Duration;
+
+// 2. External crates
+use anyhow::Result;
+use log::info;
+use tokio::sync::Mutex;
+
+// 3. Crate-local modules
+use crate::bot::Bot;
+use crate::service::Services;
+```
+
+<Info>
+  Never use wildcard imports like `use crate::module::*;`. Always import items explicitly.
+</Info>
+
+### Naming Conventions
+
+- **Types**: `PascalCase` (e.g., `FeedEntity`, `EventBus`)
+- **Functions/Variables**: `snake_case` (e.g., `get_feed`, `user_id`)
+- **Constants**: `SCREAMING_SNAKE_CASE` (e.g., `MAX_RETRIES`, `DEFAULT_TIMEOUT`)
+
+### Formatting Standards
+
+- **Indentation**: 4 spaces (no tabs)
+- **Line length**: 100 characters maximum
+- **Trailing commas**: Required in multi-line lists
+
+### Error Handling
+
+- Use `anyhow` for application errors
+- Use `thiserror` for custom error types
+- Suffix custom error types with `Error` (e.g., `DatabaseError`, `ServiceError`)
+
+```rust
+use anyhow::Result;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DatabaseError {
+    #[error("Record not found: {0}")]
+    NotFound(String),
+}
+```
+
+### Async Conventions
+
+- Use `tokio::spawn` for spawning tasks
+- Prefer `&self` with interior mutability over `&mut self`
+- Use `tokio::sync::Mutex` for async-safe locks
+
+```rust
+use tokio::sync::Mutex;
+use std::sync::Arc;
+
+pub struct MyService {
+    state: Arc<Mutex<State>>,
+}
+```
+
+### Logging
+
+Use the `log` crate macros with contextual information:
+
+```rust
+use log::{debug, info, error};
+
+info!("Starting feed check for feed_id={}", feed_id);
+debug!("Fetched {} items from database", items.len());
+error!("Failed to connect to Discord: {:?}", e);
+```
+
+### Testing
+
+- Use `#[tokio::test]` for async tests
+- Place test utilities in `tests/common/`
+- Tests require `SQLX_OFFLINE=true` environment variable in CI
+
+```rust
+#[tokio::test]
+async fn test_feed_subscription() {
+    let service = setup_test_service().await;
+    let result = service.subscribe("https://example.com", &subscriber).await;
+    assert!(result.is_ok());
+}
+```
+
+## Commit Conventions
+
+Follow these commit message guidelines:
+
+### Commit Types
+
+- `feat`: New feature
+- `fix`: Bug fix
+- `refactor`: Code refactoring
+- `docs`: Documentation changes
+- `test`: Test additions or changes
+- `chore`: Maintenance tasks
+
+### User-Facing Commits
+
+Prefix user-facing changes with `u_` to include them in release notes:
+
+```bash
+u_feat: add voice leaderboard command
+u_fix: resolve feed notification delay
+```
+
+### Format
+
+```
+type: brief description (50 chars or less)
+
+More detailed explanation if needed. Focus on WHY the change
+was made rather than WHAT changed (the diff shows that).
+```
+
+### Examples
+
+<CodeGroup>
+```bash Feature
+git commit -m "feat: implement feed subscription service"
+```
+
+```bash Bug fix
+git commit -m "fix: handle null values in voice session queries"
+```
+
+```bash Refactor
+git commit -m "refactor: extract event bus logic into separate module"
+```
+
+```bash User-facing
+git commit -m "u_feat: add /leaderboard partner command
+
+Allows users to see who they've spent the most time with in voice
+channels. Implements partner leaderboard query with time range filters."
+```
+</CodeGroup>
+
+## CI/CD
+
+GitHub Actions runs the following checks on every pull request:
+
+- **Format check**: Ensures code is properly formatted
+- **Build**: Verifies the project compiles
+- **Clippy**: Runs linter for code quality
+- **Tests**: Executes the test suite
+
+<Info>
+  All CI checks must pass before a pull request can be merged.
+</Info>
+
+## Documentation
+
+When updating architecture:
+
+1. Edit `.mmd` files in `docs/diagrams/`
+2. Compile diagrams to PNG:
+   ```bash
+   ./dev.sh docs
+   ```
+3. Commit both the source and generated images
+
+## Common Mistakes to Avoid
+
+<Accordion title="Stripping documentation comments">
+  Always preserve `///` doc comments and `//!` module docs when refactoring or moving code. Never delete documentation.
+</Accordion>
+
+<Accordion title="Not following commit conventions">
+  Strictly adhere to the commit message format. Use `u_` prefix for user-facing changes that should appear in release notes.
+</Accordion>
+
+<Accordion title="Using wildcard imports">
+  Never use `use crate::*;` or `use module::*;`. Always import items explicitly at the top of the file.
+</Accordion>
+
+## Getting Help
+
+For detailed guidelines on specific tasks:
+
+- **Adding commands**: See [Adding Commands](/development/adding-commands)
+- **Database changes**: See [Database](/development/database)
+- **Architecture patterns**: See [Architecture](/development/architecture)
+- **Testing**: See [Testing Guidelines](/development/testing)

@@ -1,0 +1,233 @@
+---
+title: "Feed Subscriptions"
+description: "Track anime episodes and manga chapters from AniList, MangaDex, and Comick with automatic notifications"
+---
+
+## Overview
+
+pwr-bot monitors external content platforms and delivers instant notifications when new episodes or chapters are released. Subscribe to your favorite anime and manga series to never miss an update.
+
+<CardGroup cols={3}>
+  <Card title="AniList" icon="tv">
+    Track anime episode releases with real-time GraphQL API integration
+  </Card>
+  <Card title="MangaDex" icon="book">
+    Monitor manga chapter updates from the largest free manga platform
+  </Card>
+  <Card title="Comick" icon="book-open">
+    Follow manga series with fast chapter notifications
+  </Card>
+</CardGroup>
+
+## Supported Platforms
+
+### AniList
+
+Track anime episode releases from AniList's comprehensive database.
+
+<Info>
+  **Feed Item Type:** Episodes  
+  **Rate Limit:** 30 requests per minute  
+  **Example URL:** `https://anilist.co/anime/21`
+</Info>
+
+**What's tracked:**
+- Airing schedule for currently airing anime
+- Episode number and air time
+- Series title (romaji)
+- Cover image
+
+**API Integration:**
+- Uses AniList's GraphQL API
+- Fetches latest aired episode (sorted by `EPISODE_DESC`)
+- Respects rate limiting with automatic request throttling
+- Extracts episode data from `AiringSchedule` queries
+
+### MangaDex
+
+Monitor manga chapter releases from the world's largest free manga platform.
+
+<Info>
+  **Feed Item Type:** Chapters  
+  **Rate Limit:** 5 requests per second  
+  **Example URL:** `https://mangadex.org/title/UUID`
+</Info>
+
+**What's tracked:**
+- Latest manga chapters (English and Indonesian)
+- Chapter number and publish time
+- Series title (multiple languages supported)
+- Cover artwork
+
+**API Integration:**
+- Uses MangaDex REST API v5
+- Validates UUID format for manga IDs
+- Supports multi-language titles (en, ja-ro, ja)
+- Fetches cover art through relationships
+- Custom User-Agent required per API guidelines
+
+### Comick
+
+Track manga series from Comick's extensive library.
+
+<Info>
+  **Feed Item Type:** Chapters  
+  **Rate Limit:** 200 requests per minute  
+  **Example URL:** `https://comick.io/comic/slug`
+</Info>
+
+**What's tracked:**
+- Latest English chapters
+- Chapter number and publication date
+- Series metadata and descriptions
+- Cover images from CDN
+
+**API Integration:**
+- Uses Comick API with Chrome emulation headers
+- Fetches comic metadata via slug-based URLs
+- Retrieves chapters via HID (internal identifier)
+- Cover images served from `meo.comick.pictures`
+
+## How Subscriptions Work
+
+### Creating Subscriptions
+
+Users can subscribe to feeds in two ways:
+
+1. **Server Subscriptions** - Notifications sent to a configured channel
+2. **DM Subscriptions** - Notifications sent directly to your DMs
+
+<Tip>
+  Use `/feed subscribe` to create a subscription. You'll need to provide the source URL from one of the supported platforms.
+</Tip>
+
+### Subscription Workflow
+
+<Steps>
+  <Step title="Paste URL">
+    Provide the URL of the anime or manga you want to track (e.g., `https://anilist.co/anime/21`)
+  </Step>
+  
+  <Step title="Platform Detection">
+    The bot automatically detects which platform the URL belongs to by matching the domain
+  </Step>
+  
+  <Step title="Source Validation">
+    The bot fetches source information to verify the series exists and is accessible
+  </Step>
+  
+  <Step title="Subscription Created">
+    The subscription is stored in the database with the source ID and items ID for tracking
+  </Step>
+</Steps>
+
+### Feed Storage
+
+Each feed source is stored with:
+- **Source ID** - Platform-specific identifier extracted from the URL
+- **Items ID** - ID used to fetch the latest items (may differ from source ID)
+- **Name** - Human-readable series name
+- **Description** - Series synopsis or description
+- **Image URL** - Cover art or thumbnail
+- **Platform** - Which platform hosts this content
+
+<Accordion title="Technical Details: ID Extraction">
+  Different platforms use different URL structures:
+  
+  - **AniList:** Extracts numeric ID from path: `/anime/21` → `21`
+  - **MangaDex:** Extracts UUID from path: `/title/UUID` → `UUID`
+  - **Comick:** Extracts slug from path: `/comic/slug` → `slug`
+  
+  For Comick, the source ID (slug) differs from the items ID (HID), which is fetched from the API.
+</Accordion>
+
+## Notification Delivery
+
+### Server Notifications
+
+When subscribed to a server feed:
+
+1. **Polling System** - The bot periodically checks for new items on all active feeds
+2. **Change Detection** - Compares the latest item with the last recorded item
+3. **Embed Creation** - Generates a rich embed with series info, chapter/episode number, and cover image
+4. **Channel Delivery** - Posts the notification to the configured server channel
+
+<Info>
+  Server feed notifications require a channel to be configured via `/settings`. Admins can also set role requirements for subscribing/unsubscribing.
+</Info>
+
+### DM Notifications
+
+When subscribed to a DM feed:
+
+- Notifications are sent directly to your DMs
+- No server configuration needed
+- Same rich embed format as server notifications
+- Works across all servers where you use the bot
+
+### Notification Format
+
+Each notification includes:
+- **Platform logo** - Visual indicator of the source
+- **Series title** - Name of the anime or manga
+- **Item title** - Episode or chapter number
+- **Cover image** - Series artwork
+- **Direct link** - Click to view the content
+- **Copyright notice** - Platform attribution
+
+## Rate Limiting & Performance
+
+All platforms implement rate limiting to ensure reliable operation:
+
+- **Governor-based limiting** - Uses the `governor` crate for in-memory rate limiting
+- **Automatic throttling** - Requests wait until rate limit quota is available
+- **Logging** - Info-level logs when rate limits are hit
+
+<Accordion title="Rate Limit Implementation">
+  Each platform has a `send()` method that checks the rate limiter before making requests:
+  
+  ```rust
+  async fn send(&self, request: RequestBuilder) -> Result<Response> {
+      if self.limiter.check().is_err() {
+          info!("Source {} is ratelimited. Waiting...", self.base.info.name);
+      }
+      self.limiter.until_ready().await;
+      
+      let req = request.build()?;
+      self.client.execute(req).await
+  }
+  ```
+  
+  This ensures the bot never exceeds platform rate limits, even under high load.
+</Accordion>
+
+## Commands
+
+<CardGroup cols={2}>
+  <Card title="/feed subscribe" icon="plus">
+    Subscribe to a feed for server or DM notifications
+  </Card>
+  <Card title="/feed unsubscribe" icon="minus">
+    Unsubscribe from a feed
+  </Card>
+  <Card title="/feed list" icon="list">
+    View all your active subscriptions
+  </Card>
+  <Card title="/settings" icon="gear">
+    Configure server feed settings (admin only)
+  </Card>
+</CardGroup>
+
+## Error Handling
+
+The bot handles various error scenarios gracefully:
+
+- **Invalid URLs** - Clear error messages for unsupported formats
+- **Missing content** - Detection when a series has no episodes/chapters yet
+- **API errors** - Parses and displays platform-specific error messages
+- **Network issues** - Automatic retry with exponential backoff
+- **Rate limiting** - Transparent waiting without user impact
+
+<Tip>
+  If you encounter issues subscribing to a feed, verify the URL is correct and the series exists on the platform. Some series may not be available in all regions.
+</Tip>

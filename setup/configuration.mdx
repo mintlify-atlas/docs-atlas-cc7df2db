@@ -1,0 +1,275 @@
+---
+title: Configuration
+description: Environment variables and configuration options for pwr-bot
+---
+
+pwr-bot is configured using environment variables. These can be set in a `.env` file or passed directly to the Docker container.
+
+## Configuration File
+
+When running pwr-bot, create a `.env` file in the same directory as the binary or use it with Docker. You can download the [.env-example](https://github.com/FAZuH/pwr-bot/blob/main/.env-example) file as a starting point.
+
+<CodeGroup>
+
+```bash .env-example
+POLL_INTERVAL=180
+DATABASE_PATH=./data/data.db
+DATABASE_URL=sqlite://data.db
+DISCORD_TOKEN=discord-bot-token
+DISCORD_APPLICATION_ID=1234567890
+RUST_LOG=pwr_bot=info
+ADMIN_ID=123
+LOGS_PATH=./logs
+DATA_PATH=./data
+ENABLE_VOICE_TRACKING=true
+ENABLE_FEED_PUBLISHER=true
+ENABLE_AUTOREGISTER_CMD=true
+```
+
+</CodeGroup>
+
+## Required Variables
+
+These variables must be set for pwr-bot to function.
+
+<ParamField path="DISCORD_TOKEN" type="string" required>
+  Your Discord bot token obtained from the [Discord Developer Portal](https://discord.com/developers/applications).
+  
+  Get this from: **Bot** tab → **Reset Token**
+
+  <Warning>
+  Never commit this token to version control or share it publicly.
+  </Warning>
+</ParamField>
+
+<ParamField path="ADMIN_ID" type="string" required>
+  Your Discord user ID. This grants access to admin commands like `!register_owner`.
+  
+  To find your user ID:
+  1. Enable Developer Mode in Discord (User Settings → Advanced → Developer Mode)
+  2. Right-click your username and select "Copy User ID"
+</ParamField>
+
+## Optional Variables
+
+These variables have default values and can be customized as needed.
+
+### Discord Configuration
+
+<ParamField path="DISCORD_APPLICATION_ID" type="string" default="1234567890">
+  Your Discord Application ID from the Developer Portal.
+  
+  **Required for:** Command autoregistration feature (when `ENABLE_AUTOREGISTER_CMD=true`)
+  
+  Get this from: **General Information** tab → **Application ID**
+</ParamField>
+
+### Feature Toggles
+
+<ParamField path="ENABLE_VOICE_TRACKING" type="boolean" default="true">
+  Enable voice channel activity tracking and heartbeat monitoring.
+  
+  When enabled, the bot tracks time spent in voice channels and provides leaderboard commands.
+</ParamField>
+
+<ParamField path="ENABLE_FEED_PUBLISHER" type="boolean" default="true">
+  Enable feed polling and publishing for anime/manga subscriptions.
+  
+  When enabled, the bot checks for updates from AniList, MangaDex, and Comick at the interval specified by `POLL_INTERVAL`.
+</ParamField>
+
+<ParamField path="ENABLE_AUTOREGISTER_CMD" type="boolean" default="true">
+  Enable the autoregister command feature.
+  
+  When enabled, users with appropriate permissions can use `!register` to automatically register slash commands.
+  
+  **Requires:** `DISCORD_APPLICATION_ID` to be set
+</ParamField>
+
+### Paths and Storage
+
+<ParamField path="DATABASE_PATH" type="string" default="./data/data.db">
+  Path to the SQLite database file.
+  
+  The bot will create this file if it doesn't exist. Ensure the parent directory exists and is writable.
+</ParamField>
+
+<ParamField path="DATABASE_URL" type="string" default="sqlite://data.db">
+  SQLite database connection URL.
+  
+  Used internally by SQLx. Should match the `DATABASE_PATH` in URL format.
+</ParamField>
+
+<ParamField path="DATA_PATH" type="string" default="./data">
+  Directory for storing data files including the database.
+  
+  The bot will create this directory if it doesn't exist.
+</ParamField>
+
+<ParamField path="LOGS_PATH" type="string" default="./logs">
+  Directory for storing application log files.
+  
+  The bot will create this directory if it doesn't exist.
+</ParamField>
+
+### Behavior Settings
+
+<ParamField path="POLL_INTERVAL" type="number" default="180">
+  Feed polling interval in seconds.
+  
+  How often the bot checks for new anime/manga updates. Minimum recommended: 60 seconds.
+  
+  <Note>
+  Lower values mean more frequent updates but higher API usage.
+  </Note>
+</ParamField>
+
+<ParamField path="RUST_LOG" type="string" default="pwr_bot=info">
+  Logging level configuration.
+  
+  Controls the verbosity of application logs. Common values:
+  - `pwr_bot=error` - Only errors
+  - `pwr_bot=warn` - Warnings and errors
+  - `pwr_bot=info` - General information (recommended)
+  - `pwr_bot=debug` - Detailed debugging information
+  - `pwr_bot=trace` - Very verbose debugging
+  
+  For more advanced configuration, see the [Rust log documentation](https://rust-lang-nursery.github.io/rust-cookbook/development_tools/debugging/config_log.html).
+</ParamField>
+
+## Docker-Specific Configuration
+
+When using Docker, environment variables can be passed in multiple ways:
+
+<Tabs>
+  <Tab title="Docker Compose">
+
+Edit the `.env` file in the same directory as `docker-compose.yml`:
+
+```bash
+DISCORD_TOKEN=your_token_here
+ADMIN_ID=your_user_id
+POLL_INTERVAL=180
+```
+
+Then start with:
+
+```bash
+docker compose up -d
+```
+
+  </Tab>
+
+  <Tab title="Docker Run with --env-file">
+
+Create a `.env` file and pass it to Docker:
+
+```bash
+docker run -d \
+  --name pwr-bot \
+  --restart unless-stopped \
+  --env-file .env \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  ghcr.io/fazuh/pwr-bot:latest
+```
+
+  </Tab>
+
+  <Tab title="Docker Run with -e flags">
+
+Pass variables directly:
+
+```bash
+docker run -d \
+  --name pwr-bot \
+  --restart unless-stopped \
+  -e DISCORD_TOKEN="your_token" \
+  -e ADMIN_ID="your_id" \
+  -e POLL_INTERVAL=180 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  ghcr.io/fazuh/pwr-bot:latest
+```
+
+  </Tab>
+</Tabs>
+
+## Example Configurations
+
+<AccordionGroup>
+
+<Accordion title="Minimal Configuration">
+
+Minimal setup with only required variables:
+
+```bash
+DISCORD_TOKEN=your_discord_token_here
+ADMIN_ID=your_discord_user_id
+```
+
+</Accordion>
+
+<Accordion title="Production Configuration">
+
+Recommended production setup with custom paths:
+
+```bash
+DISCORD_TOKEN=your_discord_token_here
+DISCORD_APPLICATION_ID=your_application_id
+ADMIN_ID=your_discord_user_id
+POLL_INTERVAL=180
+DATABASE_PATH=/var/lib/pwr-bot/data.db
+LOGS_PATH=/var/log/pwr-bot
+DATA_PATH=/var/lib/pwr-bot
+RUST_LOG=pwr_bot=info
+ENABLE_VOICE_TRACKING=true
+ENABLE_FEED_PUBLISHER=true
+ENABLE_AUTOREGISTER_CMD=true
+```
+
+</Accordion>
+
+<Accordion title="Development/Debug Configuration">
+
+Setup for development with verbose logging:
+
+```bash
+DISCORD_TOKEN=your_discord_token_here
+DISCORD_APPLICATION_ID=your_application_id
+ADMIN_ID=your_discord_user_id
+POLL_INTERVAL=60
+RUST_LOG=pwr_bot=debug,serenity=debug
+ENABLE_VOICE_TRACKING=true
+ENABLE_FEED_PUBLISHER=true
+ENABLE_AUTOREGISTER_CMD=true
+```
+
+</Accordion>
+
+<Accordion title="Feed-Only Configuration">
+
+Run only feed subscription features without voice tracking:
+
+```bash
+DISCORD_TOKEN=your_discord_token_here
+ADMIN_ID=your_discord_user_id
+POLL_INTERVAL=300
+ENABLE_VOICE_TRACKING=false
+ENABLE_FEED_PUBLISHER=true
+ENABLE_AUTOREGISTER_CMD=true
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+## Next Steps
+
+After configuring your environment:
+
+1. Choose your installation method:
+   - [Docker Installation](/setup/docker) (recommended)
+   - [Manual Installation](/setup/manual)
+
+2. See the command registration steps in the [Quick Start](/quickstart#step-3-register-commands) guide

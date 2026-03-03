@@ -1,0 +1,79 @@
+---
+title: Discord Application Setup
+description: Configure your Discord application and bot for pwr-bot
+---
+
+Before running pwr-bot, you need to create a Discord application and configure it with the necessary permissions.
+
+<Steps>
+
+<Step title="Create a Discord Application">
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click **New Application** and give it a name
+
+</Step>
+
+<Step title="Configure Bot Settings">
+
+Navigate to the **Bot** tab:
+
+1. Click **Reset Token** to generate your bot token
+2. Copy and save this token securely - you'll need it for the `DISCORD_TOKEN` environment variable
+3. Under **Privileged Gateway Intents**, enable:
+   - **Message Content Intent** (required for the bot to read message content)
+
+<Warning>
+Never share your bot token publicly. Anyone with this token can control your bot.
+</Warning>
+
+</Step>
+
+<Step title="Set Bot Permissions">
+
+Navigate to **OAuth2 → URL Generator**:
+
+1. Under **Scopes**, select:
+   - `bot`
+   - `applications.commands`
+
+2. Under **Bot Permissions**, select:
+   - `View Channels`
+   - `Send Messages`
+   - `Embed Links`
+   - `Read Message History` (Required for the `!register` command)
+
+3. Copy the generated URL at the bottom of the page
+
+</Step>
+
+<Step title="Invite Bot to Server">
+
+1. Paste the generated URL into your browser
+2. Select the server you want to add the bot to
+3. Click **Authorize**
+
+</Step>
+
+<Step title="Get Application ID">
+
+Navigate to the **General Information** tab:
+
+1. Copy the **Application ID**
+2. Save this for the `DISCORD_APPLICATION_ID` environment variable (required if using the autoregister command feature)
+
+</Step>
+
+</Steps>
+
+## Next Steps
+
+After completing the Discord setup:
+
+1. Choose your installation method:
+   - [Docker Installation](/setup/docker) (recommended)
+   - [Manual Installation](/setup/manual)
+
+2. Configure your environment variables in the [Configuration](/setup/configuration) guide
+
+3. See the command registration steps in the [Quick Start](/quickstart#step-3-register-commands) guide

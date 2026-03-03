@@ -1,0 +1,178 @@
+---
+title: Introduction
+description: A lightning-fast Discord bot for anime/manga feed notifications and voice channel tracking
+---
+
+# Welcome to pwr-bot
+
+pwr-bot is a Discord bot that sends feed update notifications to your DM or server, with built-in voice channel activity tracking. Built with Rust for exceptional performance and minimal resource usage.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get your bot up and running in under 5 minutes
+  </Card>
+  <Card
+    title="Discord Setup"
+    icon="discord"
+    href="/setup/discord"
+  >
+    Create and configure your Discord application
+  </Card>
+  <Card
+    title="Feed Subscriptions"
+    icon="bell"
+    href="/features/feed-subscriptions"
+  >
+    Subscribe to anime and manga updates from multiple platforms
+  </Card>
+  <Card
+    title="Voice Tracking"
+    icon="microphone"
+    href="/features/voice-tracking"
+  >
+    Track voice channel activity with server-wide leaderboards
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Anime and Manga Subscriptions
+
+Subscribe to updates from **AniList**, **MangaDex**, and **Comick**. Receive notifications via Discord Direct Messages (DMs) or server channels.
+
+```rust
+// From src/bot/commands/feed/subscribe.rs
+/// Subscribe to one or more feeds
+///
+/// Add feeds to receive notifications. You can subscribe in your DM or
+/// in the server (if server feed settings are configured).
+#[poise::command(slash_command)]
+pub async fn subscribe(
+    ctx: Context<'_>,
+    #[description = "Link(s) of the feeds. Separate links with commas (,)"]
+    links: String,
+    #[description = "Where to send the notifications. Default to your DM"]
+    send_into: Option<SendInto>,
+) -> Result<(), Error>
+```
+
+### Voice Channel Activity Tracking
+
+Track time spent in voice channels with comprehensive leaderboards. View rankings by different time periods, see your voice partners, and visualize your activity.
+
+```rust
+// From src/bot/commands/voice/leaderboard.rs
+/// Display the voice activity leaderboard
+///
+/// Shows a ranked list of users by total time spent in voice channels.
+/// Includes your current rank position.
+#[poise::command(slash_command)]
+pub async fn leaderboard(
+    ctx: Context<'_>,
+    #[description = "Time period to filter voice activity. Defaults to 'This month'"]
+    time_range: Option<VoiceLeaderboardTimeRange>,
+) -> Result<(), Error>
+```
+
+### Lightning Fast Performance
+
+<Note>
+Based on v0.1.15 metrics
+</Note>
+
+- **Application initialization**: ~0.3s
+- **Bot initialization**: ~2s
+- Built with Rust for native performance
+
+```rust
+// From src/main.rs
+#[tokio::main]
+async fn main() -> Result<()> {
+    dotenv().ok();
+
+    let init_start = Instant::now();
+    let config = load_config().await?;
+    let event_bus = Arc::new(EventBus::new());
+
+    let db = setup_database(&config, init_start).await?;
+    let platforms = Arc::new(Platforms::new());
+    let services = setup_services(db.clone(), platforms.clone()).await?;
+    // ...
+    info!(
+        "pwr-bot is up in {:.2}s. Press Ctrl+C to stop.",
+        init_start.elapsed().as_secs_f64()
+    );
+}
+```
+
+### Lightweight Footprint
+
+Minimal resource usage for efficient hosting:
+
+- **Binary size**: 21.2 MB
+- **Docker image**: 46.4 MB
+- **Runtime memory**: Efficient Rust memory management
+
+### Automatic Database Migrations
+
+SQLite database with automatic migrations on startup:
+
+```rust
+// From src/main.rs
+async fn setup_database(config: &Config, init_start: Instant) -> Result<Arc<Repository>> {
+    debug!("Setting up Database...");
+    let db = Arc::new(Repository::new(&config.db_url, &config.db_path).await?);
+
+    info!("Running database migrations...");
+    db.run_migrations().await?;
+    info!(
+        "Database setup complete ({:.2}s).",
+        init_start.elapsed().as_secs_f64()
+    );
+
+    Ok(db)
+}
+```
+
+## Architecture
+
+pwr-bot is built with modern Rust patterns:
+
+- **Framework**: Serenity + Poise for Discord integration
+- **Async Runtime**: Tokio for efficient concurrent operations
+- **Database**: SQLx with SQLite for data persistence
+- **Event System**: Custom event bus for decoupled components
+- **Feed Polling**: Configurable interval-based updates
+
+## Performance Metrics Summary
+
+| Metric | Value |
+|--------|-------|
+| Application Init | ~0.3s |
+| Binary Size | 21.2 MB |
+| Docker Image | 46.4 MB |
+| Database | SQLite with auto-migrations |
+| Language | Rust (Edition 2024) |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Get Started"
+    icon="play"
+    href="/quickstart"
+  >
+    Follow the quick start guide to deploy your bot
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/setup/configuration"
+  >
+    Learn about all available configuration options
+  </Card>
+</CardGroup>

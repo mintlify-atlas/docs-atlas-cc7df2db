@@ -1,0 +1,213 @@
+---
+title: Docker Installation
+description: Install and run pwr-bot using Docker or Docker Compose
+---
+
+Docker is the recommended way to run pwr-bot. It provides a consistent environment and easy setup.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) installed on your system
+- Completed [Discord Application Setup](/setup/discord)
+
+<Tabs>
+  <Tab title="Docker Compose (Recommended)">
+
+## Docker Compose Installation
+
+Docker Compose provides the easiest way to manage pwr-bot with persistent volumes and configuration.
+
+<Steps>
+
+<Step title="Clone the Repository">
+
+```bash
+git clone https://github.com/FAZuH/pwr-bot
+cd pwr-bot
+```
+
+</Step>
+
+<Step title="Configure Environment">
+
+Copy the example environment file and edit it with your Discord credentials:
+
+```bash
+cp .env-example .env
+```
+
+Edit the `.env` file with your text editor and configure the required variables. See [Configuration](/setup/configuration) for details.
+
+<Note>
+At minimum, you must set `DISCORD_TOKEN` and `ADMIN_ID`.
+</Note>
+
+</Step>
+
+<Step title="Start the Bot">
+
+Run the bot in detached mode:
+
+```bash
+docker compose up -d
+```
+
+To view logs:
+
+```bash
+docker compose logs -f
+```
+
+</Step>
+
+</Steps>
+
+### Managing the Bot
+
+<CodeGroup>
+
+```bash Stop the bot
+docker compose down
+```
+
+```bash Restart the bot
+docker compose restart
+```
+
+```bash Update to latest version
+docker compose pull
+docker compose up -d
+```
+
+```bash View logs
+docker compose logs -f
+```
+
+</CodeGroup>
+
+  </Tab>
+
+  <Tab title="Docker Run">
+
+## Docker Run Installation
+
+If you prefer to run the container directly without Docker Compose or cloning the repository:
+
+<Steps>
+
+<Step title="Prepare Directories">
+
+Create directories to persist data and logs:
+
+```bash
+mkdir -p pwr-bot/data pwr-bot/logs
+cd pwr-bot
+```
+
+</Step>
+
+<Step title="Run the Container">
+
+<Tabs>
+  <Tab title="With Environment Variables">
+
+Replace the placeholder values with your actual configuration:
+
+```bash
+docker run -d \
+  --name pwr-bot \
+  --restart unless-stopped \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  -e DISCORD_TOKEN="your_discord_token_here" \
+  -e ADMIN_ID="your_admin_id_here" \
+  ghcr.io/fazuh/pwr-bot:latest
+```
+
+<Note>
+This example uses only the required variables. See [Configuration](/setup/configuration) for all available options.
+</Note>
+
+  </Tab>
+
+  <Tab title="With .env File">
+
+If you have a `.env` file in your current directory:
+
+```bash
+docker run -d \
+  --name pwr-bot \
+  --restart unless-stopped \
+  --env-file .env \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  ghcr.io/fazuh/pwr-bot:latest
+```
+
+  </Tab>
+</Tabs>
+
+</Step>
+
+</Steps>
+
+### Managing the Bot
+
+<CodeGroup>
+
+```bash Stop the bot
+docker stop pwr-bot
+```
+
+```bash Start the bot
+docker start pwr-bot
+```
+
+```bash Restart the bot
+docker restart pwr-bot
+```
+
+```bash View logs
+docker logs -f pwr-bot
+```
+
+```bash Update to latest version
+docker stop pwr-bot
+docker rm pwr-bot
+docker pull ghcr.io/fazuh/pwr-bot:latest
+# Then run the docker run command again
+```
+
+```bash Remove the bot
+docker stop pwr-bot
+docker rm pwr-bot
+```
+
+</CodeGroup>
+
+  </Tab>
+</Tabs>
+
+## Volume Mounts
+
+The Docker containers use two volume mounts:
+
+<ParamField path="/app/data" type="volume">
+  Stores the SQLite database and other persistent data files
+</ParamField>
+
+<ParamField path="/app/logs" type="volume">
+  Stores application log files
+</ParamField>
+
+<Warning>
+Always ensure these volumes are mounted to persist data between container restarts. Losing the data volume means losing all subscriptions and tracked voice channel data.
+</Warning>
+
+## Next Steps
+
+After the bot is running:
+
+1. Check the logs to ensure the bot started successfully
+2. See the command registration steps in the [Quick Start](/quickstart#step-3-register-commands) guide
+3. Start using the bot's features

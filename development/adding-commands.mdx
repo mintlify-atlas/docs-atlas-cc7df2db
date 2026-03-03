@@ -1,0 +1,238 @@
+---
+title: Adding Commands
+description: Learn how to add new bot commands using the Command Pattern with Poise
+---
+
+pwr-bot uses the **Command Pattern** with the Poise framework to organize Discord commands. This guide walks you through creating new commands step by step.
+
+## Overview
+
+Commands are organized using the Cog pattern in `src/bot/commands.rs`. Each command can be:
+- A simple slash command
+- A command with subcommands
+- Part of a larger command group
+
+## Command Structure
+
+All commands use these type aliases defined in `src/bot/commands.rs:14-17`:
+
+```rust
+/// Error type used across bot commands.
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+
+/// Context type passed to command handlers.
+pub type Context<'a> = poise::Context<'a, Data, Error>;
+```
+
+## Adding a Simple Command
+
+<Steps>
+
+### Create the command function
+
+Create a new file in `src/bot/commands/` (e.g., `my_command.rs`):
+
+```rust
+use crate::bot::commands::{Context, Error};
+
+/// Description shown in Discord's command list
+#[poise::command(slash_command)]
+pub async fn my_command(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.say("Hello from my command!").await?;
+    Ok(())
+}
+```
+
+### Add the module to commands.rs
+
+In `src/bot/commands.rs:3-11`, add your module:
+
+```rust
+pub mod about;
+pub mod dump_db;
+pub mod feed;
+pub mod my_command;  // Add this line
+pub mod register;
+// ... other modules
+```
+
+### Register the command
+
+Add the command to the `Cogs` implementation in `src/bot/commands.rs:32-46`:
+
+```rust
+impl Cog for Cogs {
+    fn commands(&self) -> Vec<Command<Data, Error>> {
+        vec![
+            about::about(),
+            dump_db::dump_db(),
+            feed::feed(),
+            my_command::my_command(),  // Add this line
+            register::register(),
+            // ... other commands
+        ]
+    }
+}
+```
+
+</Steps>
+
+## Adding Commands with Subcommands
+
+For commands with subcommands (like `/feed subscribe`, `/feed unsubscribe`), use the `subcommands` attribute.
+
+<CodeGroup>
+
+```rust Parent Command (src/bot/commands/feed.rs:44-55)
+/// Manage feed subscriptions and settings
+#[poise::command(
+    slash_command,
+    subcommands(
+        "settings::settings",
+        "subscribe::subscribe",
+        "unsubscribe::unsubscribe",
+        "list::list"
+    )
+)]
+pub async fn feed(_ctx: Context<'_>) -> Result<(), Error> {
+    Ok(())
+}
+```
+
+```rust Subcommand (src/bot/commands/feed/subscribe.rs)
+use crate::bot::commands::{Context, Error};
+
+/// Subscribe to a feed
+#[poise::command(slash_command)]
+pub async fn subscribe(
+    ctx: Context<'_>,
+    #[description = "URL of the feed"] url: String,
+) -> Result<(), Error> {
+    // Implementation here
+    Ok(())
+}
+```
+
+</CodeGroup>
+
+<Note>
+The parent command function body is not called when using subcommands. It's just a container for the subcommand group.
+</Note>
+
+## Command with Parameters
+
+Add parameters to your command function with descriptions:
+
+```rust src/bot/commands/feed/subscribe.rs
+#[poise::command(slash_command)]
+pub async fn subscribe(
+    ctx: Context<'_>,
+    #[description = "URL of the content to subscribe to"] 
+    url: String,
+    #[description = "Where to receive notifications"] 
+    send_into: SendInto,
+) -> Result<(), Error> {
+    // Access parameters
+    let user_id = ctx.author().id;
+    let guild_id = ctx.guild_id();
+    
+    // Your logic here
+    ctx.say(format!("Subscribing to: {}", url)).await?;
+    Ok(())
+}
+```
+
+## Using Choice Parameters
+
+For dropdown options, use the `ChoiceParameter` derive:
+
+```rust src/bot/commands/feed.rs:61-75
+use poise::ChoiceParameter;
+
+/// Where to send feed notifications.
+#[derive(ChoiceParameter, Clone, Copy, Debug)]
+pub enum SendInto {
+    Server,
+    DM,
+}
+
+impl SendInto {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::DM => "DM",
+            Self::Server => "Server",
+        }
+    }
+}
+```
+
+## Real-World Example: About Command
+
+Here's a complete example from `src/bot/commands/about.rs:26-33`:
+
+```rust
+use crate::bot::commands::{Context, Error};
+use crate::bot::coordinator::Coordinator;
+use crate::bot::navigation::NavigationResult;
+
+/// Show information about the bot
+#[poise::command(slash_command)]
+pub async fn about(ctx: Context<'_>) -> Result<(), Error> {
+    Coordinator::new(ctx)
+        .run(NavigationResult::SettingsAbout)
+        .await?;
+    Ok(())
+}
+```
+
+## Code Style Guidelines
+
+<Warning>
+Follow these conventions from `AGENTS.md` when writing commands:
+</Warning>
+
+- **Imports**: Group `std`, external crates, then local imports
+- **Formatting**: 4 spaces, 100 char line length, trailing commas
+- **Naming**: `snake_case` for functions and variables
+- **Async**: Use `tokio` runtime, all command functions are `async`
+- **Errors**: Return `Result<(), Error>` from command functions
+- **Logging**: Use `log::info!()` and `log::debug!()` macros
+
+Example:
+
+```rust
+use std::time::Duration;
+
+use poise::serenity_prelude::*;
+
+use crate::bot::commands::{Context, Error};
+use crate::service::MyService;
+
+#[poise::command(slash_command)]
+pub async fn my_command(ctx: Context<'_>) -> Result<(), Error> {
+    log::info!("Executing my_command for user {}", ctx.author().id);
+    // Command logic
+    Ok(())
+}
+```
+
+## Testing Your Command
+
+After adding your command:
+
+1. Run format and lint:
+   ```bash
+   ./dev.sh format lint
+   ```
+
+2. Build the project:
+   ```bash
+   ./dev.sh build
+   ```
+
+3. Test in Discord by running the bot and using `/my_command`
+
+## Related Documentation
+
+- [Testing Guidelines](/development/testing) - Learn how to write tests for your commands
+- [Architecture Overview](/development/architecture) - Learn about ViewEngine and other design patterns

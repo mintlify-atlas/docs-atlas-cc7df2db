@@ -1,0 +1,172 @@
+---
+title: Manual Installation
+description: Download and run pwr-bot using pre-compiled binaries
+---
+
+You can run pwr-bot manually using pre-compiled binaries available for Linux, macOS, and Windows.
+
+## Prerequisites
+
+- Completed [Discord Application Setup](/setup/discord)
+- Operating system: Linux, macOS, or Windows
+
+<Steps>
+
+<Step title="Download the Binary">
+
+Download the latest binary for your platform from the [GitHub Releases](https://github.com/FAZuH/pwr-bot/releases) page.
+
+<Tabs>
+  <Tab title="Linux">
+  Download `pwr-bot-linux-x64` (or the appropriate architecture)
+  </Tab>
+  <Tab title="macOS">
+  Download `pwr-bot-macos-x64` (or the appropriate architecture)
+  </Tab>
+  <Tab title="Windows">
+  Download `pwr-bot-windows-x64.exe`
+  </Tab>
+</Tabs>
+
+</Step>
+
+<Step title="Download Configuration File">
+
+Download the [.env-example](https://github.com/FAZuH/pwr-bot/blob/main/.env-example) file from the repository.
+
+Save it in the same directory as the binary and rename it to `.env`.
+
+</Step>
+
+<Step title="Configure Environment Variables">
+
+Edit the `.env` file with your text editor and configure the required variables.
+
+At minimum, you must set:
+- `DISCORD_TOKEN` - Your Discord bot token
+- `ADMIN_ID` - Your Discord user ID
+
+See the [Configuration](/setup/configuration) guide for all available options.
+
+</Step>
+
+<Step title="Make Binary Executable (Linux/macOS)">
+
+<Note>
+This step is only required on Linux and macOS systems.
+</Note>
+
+Open a terminal in the directory containing the binary and run:
+
+```bash
+chmod +x pwr-bot
+```
+
+Replace `pwr-bot` with the actual filename you downloaded.
+
+</Step>
+
+<Step title="Run the Bot">
+
+<Tabs>
+  <Tab title="Linux/macOS">
+
+```bash
+./pwr-bot
+```
+
+To run in the background:
+
+```bash
+nohup ./pwr-bot > output.log 2>&1 &
+```
+
+  </Tab>
+
+  <Tab title="Windows">
+
+Double-click the executable file, or run from Command Prompt:
+
+```cmd
+pwr-bot.exe
+```
+
+  </Tab>
+</Tabs>
+
+The bot should start and connect to Discord. Check the console output or logs directory for startup messages.
+
+</Step>
+
+</Steps>
+
+## Directory Structure
+
+By default, pwr-bot creates the following directories:
+
+```
+.
+├── pwr-bot          # Binary executable
+├── .env             # Configuration file
+├── data/            # Database and data files (auto-created)
+│   └── data.db     # SQLite database
+└── logs/            # Log files (auto-created)
+```
+
+<Note>
+You can customize the paths for data and logs directories using the `DATA_PATH` and `LOGS_PATH` environment variables.
+</Note>
+
+## Managing the Bot
+
+<CodeGroup>
+
+```bash Stop the bot
+# Press Ctrl+C in the terminal where the bot is running
+# Or if running in background, find and kill the process:
+pkill pwr-bot
+```
+
+```bash View logs
+# Logs are stored in the logs/ directory by default
+tail -f logs/pwr-bot.log
+```
+
+```bash Update to new version
+# Download the new binary from GitHub Releases
+# Stop the bot
+# Replace the old binary with the new one
+# Start the bot again
+```
+
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+
+<Accordion title="Permission Denied Error (Linux/macOS)">
+Make sure you've made the binary executable:
+
+```bash
+chmod +x pwr-bot
+```
+</Accordion>
+
+<Accordion title="Database Locked Error">
+Ensure only one instance of pwr-bot is running at a time. SQLite does not support multiple concurrent write connections.
+</Accordion>
+
+<Accordion title="Bot Not Connecting to Discord">
+Verify your `DISCORD_TOKEN` is correct in the `.env` file and that the bot has been invited to your server.
+</Accordion>
+
+</AccordionGroup>
+
+## Next Steps
+
+After the bot is running:
+
+1. Check the logs to ensure the bot started successfully
+2. See the command registration steps in the [Quick Start](/quickstart#step-3-register-commands) guide
+3. Start using the bot's features

@@ -1,0 +1,252 @@
+---
+title: Feed Commands
+description: Subscribe to and manage RSS feed notifications
+---
+
+The `/feed` command group allows you to subscribe to RSS feeds and receive notifications when new content is published. You can receive notifications in your DMs or in server channels.
+
+## Overview
+
+Feed subscriptions let you stay updated on:
+- Content creator updates
+- News feeds
+- Blog posts
+- And more supported feed sources
+
+Notifications can be delivered to:
+- **DM**: Personal direct messages
+- **Server**: A designated server channel (requires server configuration)
+
+---
+
+## Subcommands
+
+### /feed subscribe
+
+Subscribe to one or more RSS feeds to receive notifications.
+
+<ParamField path="links" type="string" required>
+  Link(s) of the feeds to subscribe to. Separate multiple links with commas (`,`).
+  
+  The command supports autocomplete that shows supported feed sources.
+</ParamField>
+
+<ParamField path="send_into" type="choice" default="DM">
+  Where to send the notifications:
+  - `DM`: Send to your direct messages
+  - `Server`: Send to the server's configured feed channel
+  
+  <Note>
+    Server subscriptions require:
+    - Feed settings to be configured by a server admin (`/feed settings`)
+    - A notification channel to be set
+    - Appropriate role permissions (if configured)
+  </Note>
+</ParamField>
+
+**Usage Examples:**
+
+<CodeGroup>
+```bash Single feed to DM
+/feed subscribe links:https://example.com/feed.xml
+```
+
+```bash Multiple feeds
+/feed subscribe links:https://feed1.com/rss,https://feed2.com/feed
+```
+
+```bash Server subscription
+/feed subscribe links:https://example.com/feed.xml send_into:Server
+```
+</CodeGroup>
+
+**Response:**
+
+The bot processes subscriptions in batches and shows real-time progress:
+- ✅ Successfully subscribed to feeds
+- ❌ Already subscribed messages
+- ❌ Error messages for invalid URLs
+
+After completion, you can click "View Subscriptions" to see all your active subscriptions.
+
+---
+
+### /feed unsubscribe
+
+Remove one or more feeds from your subscriptions.
+
+<ParamField path="links" type="string" required>
+  Link(s) of the feeds to unsubscribe from. Separate multiple links with commas (`,`).
+  
+  The command provides autocomplete showing your current subscriptions.
+</ParamField>
+
+<ParamField path="send_into" type="choice" default="DM">
+  Where the notifications were being sent:
+  - `DM`: Your direct messages
+  - `Server`: The server channel
+  
+  Must match the original subscription type.
+</ParamField>
+
+**Usage Examples:**
+
+<CodeGroup>
+```bash Single unsubscribe
+/feed unsubscribe links:https://example.com/feed.xml
+```
+
+```bash Multiple feeds
+/feed unsubscribe links:https://feed1.com/rss,https://feed2.com/feed
+```
+
+```bash Server unsubscribe
+/feed unsubscribe links:https://example.com/feed.xml send_into:Server
+```
+</CodeGroup>
+
+---
+
+### /feed list
+
+View all your current feed subscriptions with pagination support.
+
+<ParamField path="sent_into" type="choice" default="DM">
+  Which subscriptions to list:
+  - `DM`: Your DM subscriptions
+  - `Server`: Server channel subscriptions
+</ParamField>
+
+**Features:**
+
+- **Pagination**: Browse through subscriptions 10 at a time
+- **Feed Details**: Shows feed name, latest version, last update time, and source link
+- **Edit Mode**: Click "✎ Edit" to enter management mode
+  - Mark feeds for unsubscription with "🗑 Unsubscribe" buttons
+  - Undo selections before saving
+  - Click "Save" to confirm removals
+- **View Mode**: Click "👁 View" to see feed information with thumbnails
+
+**Usage Examples:**
+
+<CodeGroup>
+```bash List DM subscriptions
+/feed list
+```
+
+```bash List server subscriptions
+/feed list sent_into:Server
+```
+</CodeGroup>
+
+---
+
+### /feed settings
+
+Configure feed settings for the server. **Administrator permissions required.**
+
+<Note>
+  This command requires `ADMINISTRATOR` or `MANAGE_GUILD` permissions.
+</Note>
+
+**Configuration Options:**
+
+1. **Enable/Disable Feeds**
+   - Toggle feed notifications on or off for the server
+   - When disabled, no notifications are sent
+
+2. **Notification Channel** (Required)
+   - Select the text/news channel where feed updates will be posted
+   - Must be set before users can subscribe to server feeds
+
+3. **Subscribe Permission** (Optional)
+   - Select a role that can add new feeds to the server
+   - If empty, users with "Manage Server" permission can subscribe
+
+4. **Unsubscribe Permission** (Optional)
+   - Select a role that can remove feeds from the server
+   - If empty, users with "Manage Server" permission can unsubscribe
+
+**Navigation:**
+- Click "❮ Back" to return to main settings
+- Click "🛈 About" to view bot information
+
+**Usage:**
+
+```bash
+/feed settings
+```
+
+---
+
+## Permissions
+
+### User Permissions
+
+- **DM Subscriptions**: All users can manage their own DM subscriptions
+- **Server Subscriptions**: Requires:
+  - Feed settings to be configured
+  - Appropriate role (if set by admin)
+  - Default: "Manage Server" permission
+
+### Admin Permissions
+
+- `/feed settings`: Requires `ADMINISTRATOR` or `MANAGE_GUILD` permission
+
+---
+
+## Common Workflows
+
+<Accordion title="First-time server setup">
+  1. Server admin runs `/feed settings`
+  2. Enable feeds if not already active
+  3. Select a notification channel
+  4. (Optional) Configure role permissions
+  5. Users can now run `/feed subscribe` with `send_into:Server`
+</Accordion>
+
+<Accordion title="Managing personal subscriptions">
+  1. Run `/feed subscribe` with feed links
+  2. Check subscriptions with `/feed list`
+  3. Enter edit mode to remove unwanted feeds
+  4. Or use `/feed unsubscribe` with specific links
+</Accordion>
+
+<Accordion title="Checking feed support">
+  1. Start typing in the `links` parameter of `/feed subscribe`
+  2. Autocomplete shows supported feed platforms
+  3. Each entry shows: "Platform Name (domain)"
+</Accordion>
+
+---
+
+## Error Messages
+
+<Accordion title="Configuration not set">
+  **Error**: "Server feed settings are not configured..."
+  
+  **Solution**: A server admin must run `/feed settings` and configure a notification channel.
+</Accordion>
+
+<Accordion title="Permission denied">
+  **Error**: Role check failure
+  
+  **Solution**: Contact a server admin to:
+  - Grant you the required role for subscribing/unsubscribing
+  - Or adjust the role settings in `/feed settings`
+</Accordion>
+
+<Accordion title="Already subscribed">
+  **Message**: "You are already subscribed to..."
+  
+  **Info**: This is informational. The feed was already in your subscriptions.
+</Accordion>
+
+<Accordion title="Invalid URL">
+  **Error**: URL validation failed
+  
+  **Solution**: Check that:
+  - The URL is correctly formatted
+  - The feed source is supported (check autocomplete)
+  - Links are separated by commas if subscribing to multiple
+</Accordion>

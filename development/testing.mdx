@@ -1,0 +1,432 @@
+---
+title: Testing
+description: Guidelines for running tests and writing test cases for pwr-bot
+---
+
+Testing is crucial for maintaining code quality in pwr-bot. This guide covers running tests, writing test cases, and working with the SQLX_OFFLINE mode.
+
+## Running Tests
+
+### Using dev.sh
+
+The easiest way to run tests is using the development helper script:
+
+```bash
+./dev.sh test
+```
+
+This runs `cargo test --all-features` with proper configuration.
+
+### Manual Test Execution
+
+You can also run tests directly with cargo:
+
+```bash
+# Run all tests
+cargo test --all-features
+
+# Run specific test
+cargo test test_name
+
+# Run tests in a specific file
+cargo test --test file_name
+
+# Show test output
+cargo test -- --nocapture
+```
+
+### Running the Full CI Pipeline
+
+Run all CI checks locally:
+
+```bash
+./dev.sh all
+```
+
+This executes:
+1. `format` - Code formatting with rustfmt
+2. `lint` - Linting with clippy
+3. `test` - All tests
+4. `build` - Docker image build
+
+## SQLX_OFFLINE Mode
+
+<Warning>
+pwr-bot uses SQLx with offline mode. This allows tests to run without a live database connection by using pre-generated query metadata.
+</Warning>
+
+SQLx offline mode is automatically handled:
+- **In CI**: `SQLX_OFFLINE=true` is set (from `AGENTS.md:20`)
+- **Locally**: Query metadata is stored in `.sqlx/` directory
+
+### When to Update Query Metadata
+
+Regenerate query metadata when you:
+- Add new database queries
+- Modify existing SQL statements
+- Change database schema
+
+To update metadata:
+
+```bash
+# Ensure database is up to date
+cargo sqlx database create
+cargo sqlx migrate run
+
+# Prepare query metadata
+cargo sqlx prepare
+```
+
+## Test Structure
+
+### Test File Organization
+
+Tests live in the `tests/` directory:
+
+```
+tests/
+├── common.rs                          # Shared test utilities
+├── db_table_test.rs                   # Database table tests
+├── feed_subscription_service_test.rs  # Service layer tests
+├── mock_platforms_test.rs             # Platform integration tests
+├── publisher_subscriber_test.rs       # Event system tests
+├── voice_tracking_service_test.rs     # Voice tracking tests
+└── responses/                         # Mock API responses
+    ├── anilist_fetch_source_exist.json
+    ├── mangadex_fetch_latest_exist.json
+    └── ...
+```
+
+### Common Test Utilities
+
+The `tests/common.rs:17-37` file provides shared utilities:
+
+<CodeGroup>
+
+```rust Database Setup (tests/common.rs:17-30)
+/// Sets up a temporary test database.
+pub async fn setup_db() -> (Arc<Repository>, PathBuf) {
+    let uuid = Uuid::new_v4();
+    let db_path = std::env::temp_dir().join(format!("pwr-bot-test-{}.db", uuid));
+    let db_url = format!("sqlite://{}", db_path.to_str().unwrap());
+
+    let db = Repository::new(&db_url, db_path.to_str().unwrap())
+        .await
+        .expect("Failed to create database");
+
+    db.run_migrations().await.expect("Failed to run migrations");
+
+    (Arc::new(db), db_path)
+}
+```
+
+```rust Database Cleanup (tests/common.rs:32-37)
+/// Cleans up the test database file.
+pub async fn teardown_db(db_path: PathBuf) {
+    if db_path.exists() {
+        let _ = std::fs::remove_file(db_path);
+    }
+}
+```
+
+```rust Mock Feed (tests/common.rs:42-86)
+/// Mock feed platform for testing.
+pub struct MockFeed {
+    pub base: BasePlatform,
+    pub state: Arc<RwLock<MockFeedState>>,
+}
+
+impl MockFeed {
+    pub fn new(domain: &str) -> Self {
+        // Creates a mock platform for testing
+    }
+    
+    pub fn set_latest(&self, latest: Option<FeedItem>) {
+        // Set the latest item to return
+    }
+    
+    pub fn set_info(&self, item: FeedSource) {
+        // Set source information
+    }
+}
+```
+
+</CodeGroup>
+
+## Writing Tests
+
+### Basic Test Structure
+
+Follow the conventions from `AGENTS.md:31`:
+
+```rust
+use pwr_bot::module::MyStruct;
+
+#[tokio::test]
+async fn test_my_feature() {
+    // Arrange: Set up test data
+    let value = MyStruct::new();
+    
+    // Act: Execute the test
+    let result = value.do_something().await;
+    
+    // Assert: Verify expectations
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), expected_value);
+}
+```
+
+<Note>
+All async tests must use `#[tokio::test]` instead of `#[test]`.
+</Note>
+
+### Database Tests
+
+Use the common utilities for database tests:
+
+```rust
+mod common;
+
+use common::{setup_db, teardown_db};
+
+#[tokio::test]
+async fn test_database_operation() {
+    // Setup
+    let (db, db_path) = setup_db().await;
+    
+    // Test your database operations
+    let result = db.some_table.insert(data).await;
+    assert!(result.is_ok());
+    
+    // Cleanup
+    teardown_db(db_path).await;
+}
+```
+
+### Platform Tests with Mock Servers
+
+Test platform integrations using `httpmock` (`tests/mock_platforms_test.rs:21-54`):
+
+```rust
+use httpmock::MockServer;
+use httpmock::Method::POST;
+use pwr_bot::feed::Platform;
+use pwr_bot::feed::anilist_platform::AniListPlatform;
+
+#[tokio::test]
+async fn test_anilist_fetch_source() {
+    // Start mock server
+    let server = MockServer::start();
+    let mut platform = AniListPlatform::new();
+    platform.base.info.api_url = server.url("");
+
+    // Load mock response
+    let response_body = get_response("anilist_fetch_source_exist.json");
+    let source_id = "101177";
+
+    // Configure mock
+    let mock = server.mock(|when, then| {
+        when.method(POST).body_contains(source_id);
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(response_body);
+    });
+
+    // Execute test
+    let source = platform
+        .fetch_source(source_id)
+        .await
+        .expect("Failed to fetch source");
+
+    // Verify
+    mock.assert();
+    assert_eq!(source.id, source_id);
+    assert_eq!(source.name, "Expected Title");
+}
+```
+
+### Loading Mock Response Files
+
+Store API responses in `tests/responses/` and load them:
+
+```rust tests/mock_platforms_test.rs:13-19
+use std::path::PathBuf;
+
+/// Loads a test response file from the responses directory.
+fn get_response(filename: &str) -> String {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/responses");
+    path.push(filename);
+    std::fs::read_to_string(path).expect("Failed to read response file")
+}
+```
+
+### Testing Command Functions
+
+For commands with subcommands, test the logic separately:
+
+```rust src/bot/commands/feed.rs:344-397
+#[cfg(test)]
+mod tests {
+    use poise::serenity_prelude::{GuildId, UserId};
+    use super::*;
+
+    #[test]
+    fn test_send_into_to_subscriber_type() {
+        assert!(matches!(
+            SubscriberType::from(&SendInto::DM),
+            SubscriberType::Dm
+        ));
+        assert!(matches!(
+            SubscriberType::from(&SendInto::Server),
+            SubscriberType::Guild
+        ));
+    }
+
+    #[test]
+    fn test_get_target_id_dm_returns_author_id() {
+        let result = get_target_id(
+            Some(GuildId::new(999)),
+            UserId::new(12345),
+            &SendInto::DM
+        );
+        assert_eq!(result.unwrap(), "12345");
+    }
+
+    #[test]
+    fn test_get_target_id_server_without_guild_fails() {
+        let result = get_target_id(None, UserId::new(12345), &SendInto::Server);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BotError::InvalidCommandArgument { parameter, reason } => {
+                assert_eq!(parameter, "Server");
+                assert!(reason.contains("have to be in a server"));
+            }
+            _ => panic!("Expected InvalidCommandArgument error"),
+        }
+    }
+}
+```
+
+## Test Organization Best Practices
+
+<Steps>
+
+### Use descriptive test names
+
+```rust
+// Good
+#[tokio::test]
+async fn test_fetch_latest_returns_most_recent_item() { }
+
+// Bad
+#[tokio::test]
+async fn test1() { }
+```
+
+### Group related tests in modules
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    mod fetch_operations {
+        #[tokio::test]
+        async fn test_fetch_source_succeeds() { }
+        
+        #[tokio::test]
+        async fn test_fetch_source_handles_not_found() { }
+    }
+    
+    mod url_parsing {
+        #[test]
+        fn test_extract_id_from_valid_url() { }
+        
+        #[test]
+        fn test_extract_id_from_invalid_url() { }
+    }
+}
+```
+
+### Test both success and failure cases
+
+```rust
+#[tokio::test]
+async fn test_fetch_source_with_valid_id() {
+    // Test happy path
+}
+
+#[tokio::test]
+async fn test_fetch_source_with_invalid_id() {
+    // Test error handling
+}
+
+#[tokio::test]
+async fn test_fetch_source_when_not_found() {
+    // Test edge case
+}
+```
+
+### Clean up test resources
+
+Always clean up temporary resources:
+
+```rust
+#[tokio::test]
+async fn test_with_cleanup() {
+    let (db, db_path) = setup_db().await;
+    
+    // Your test code
+    
+    // Cleanup - always runs even if test panics
+    teardown_db(db_path).await;
+}
+```
+
+</Steps>
+
+## Continuous Integration
+
+GitHub Actions runs these checks on every push:
+
+1. **Format Check**: `cargo +nightly fmt --all -- --check`
+2. **Build**: `cargo build --all-features`
+3. **Clippy**: `cargo clippy --all-targets --all-features --no-deps`
+4. **Tests**: `cargo test --all-features` with `SQLX_OFFLINE=true`
+
+<Warning>
+All checks must pass before merging. Run `./dev.sh all` locally to catch issues early.
+</Warning>
+
+## Debugging Tests
+
+### Show Test Output
+
+```bash
+cargo test -- --nocapture
+```
+
+### Run Specific Test
+
+```bash
+cargo test test_name -- --nocapture
+```
+
+### Show Ignored Tests
+
+```bash
+cargo test -- --ignored
+```
+
+### Test with Logging
+
+```bash
+RUST_LOG=debug cargo test test_name -- --nocapture
+```
+
+## Related Documentation
+
+- [Adding Commands](/development/adding-commands) - Learn how to write testable commands
+- [Adding Platforms](/development/adding-platforms) - Platform testing patterns
+- [Development Overview](/development/overview) - Full development guidelines

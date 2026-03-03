@@ -1,0 +1,300 @@
+---
+title: "Voice Channel Tracking"
+description: "Track voice channel activity with heartbeat monitoring, leaderboards, and detailed statistics"
+---
+
+## Overview
+
+pwr-bot automatically tracks how much time users spend in voice channels. The system uses a heartbeat mechanism to accurately measure voice activity and provides comprehensive leaderboards and statistics.
+
+<CardGroup cols={3}>
+  <Card title="Heartbeat Tracking" icon="heart-pulse">
+    Real-time monitoring of voice channel presence with automatic session management
+  </Card>
+  <Card title="Leaderboards" icon="trophy">
+    Ranked lists showing top voice channel users by time spent
+  </Card>
+  <Card title="Stats Visualization" icon="chart-line">
+    Contribution graphs and line charts showing activity patterns over time
+  </Card>
+</CardGroup>
+
+## Heartbeat Mechanism
+
+### How It Works
+
+The bot tracks voice activity through a heartbeat system that runs continuously:
+
+<Steps>
+  <Step title="Voice State Detection">
+    Discord events trigger when users join, leave, or change voice channels
+  </Step>
+  
+  <Step title="Session Creation">
+    When a user joins a voice channel, a new session is created with a start timestamp
+  </Step>
+  
+  <Step title="Heartbeat Loop">
+    Every 60 seconds, the bot checks all active voice sessions and records a heartbeat
+  </Step>
+  
+  <Step title="Session Completion">
+    When a user leaves, the session end time is recorded and the total duration is calculated
+  </Step>
+</Steps>
+
+### Session Management
+
+**Active Sessions:**
+- Stored in memory with start time and last heartbeat time
+- Updated every 60 seconds while user remains in voice
+- Automatically cleaned up on disconnect
+
+**Completed Sessions:**
+- Stored in database with full metadata
+- Includes: user ID, guild ID, start time, end time, duration
+- Used for generating leaderboards and statistics
+
+<Info>
+  The heartbeat interval is 60 seconds, meaning activity is sampled once per minute. Very short voice sessions (under 60 seconds) may not be recorded.
+</Info>
+
+### Edge Case Handling
+
+<Accordion title="Bot Restarts">
+  If the bot restarts while users are in voice channels:
+  - Previous sessions are finalized with the last known heartbeat
+  - New sessions are created for currently active users
+  - Minimal data loss (at most 60 seconds)
+</Accordion>
+
+<Accordion title="Channel Moves">
+  When a user moves between voice channels:
+  - Current session is ended
+  - New session is created for the new channel
+  - Both sessions are tracked separately
+</Accordion>
+
+<Accordion title="AFK Channels">
+  Users in AFK channels are tracked normally. Server admins can configure tracking behavior via `/vc settings` if needed.
+</Accordion>
+
+## Leaderboards
+
+Leaderboards show ranked lists of users by total voice time spent in the server.
+
+### Features
+
+**Time Range Filters:**
+- Today (from UTC 00:00)
+- Past 24 hours
+- Past 72 hours
+- Past 7 days
+- Past 14 days
+- This month (from 1st of current month)
+- This year (from January 1st)
+- All time
+
+**Display Options:**
+- **Server Leaderboard** - All users ranked by voice time
+- **Voice Partners** - Users you've spent the most time with in voice channels
+
+**Pagination:**
+- 10 users per page
+- Previous/Next navigation buttons
+- Shows your current rank even if you're not on the displayed page
+
+### Leaderboard Images
+
+Leaderboards are rendered as stylized images:
+
+- **Custom design** - Uses canvas rendering with custom fonts and styling
+- **User avatars** - Displays profile pictures for each ranked user
+- **Rank indicators** - Gold, silver, bronze styling for top 3
+- **Duration formatting** - Human-readable time format (e.g., "2h 34m")
+- **Server branding** - Includes server icon and name
+
+<Tip>
+  Leaderboard images are generated on-demand and cached for the duration of the interaction. Each page is rendered separately when navigated to.
+</Tip>
+
+### Voice Partners Mode
+
+The Voice Partners feature shows users you've overlapped with in voice channels:
+
+- Calculates shared time in the same voice channel
+- Ranks users by total overlap duration
+- Shows who you spend the most voice time with
+- Filterable by all the same time ranges
+
+<Accordion title="Technical Details: Partner Calculation">
+  Voice partners are calculated by:
+  1. Finding all sessions for the target user
+  2. Finding all overlapping sessions from other users in the same channel
+  3. Calculating intersection of time ranges
+  4. Aggregating total overlap duration per user
+  5. Ranking by total shared time
+  
+  The calculation is performed at the database level for efficiency.
+</Accordion>
+
+## Statistics Visualization
+
+The `/vc stats` command provides detailed activity analysis with visual charts.
+
+### Chart Types
+
+**Yearly View (Contribution Grid):**
+- GitHub-style contribution graph showing daily activity
+- Color intensity represents activity level
+- Shows patterns over the past year
+- Works for both user and server stats
+
+**Other Views (Line Charts):**
+- **Hourly** - Activity over the past 4 days
+- **Weekly** - Activity over the past 4 weeks
+- **Monthly** - Activity over the past 4 months
+- Uses Plotters library for high-quality chart rendering
+
+### User Statistics
+
+When viewing your own stats or another user's stats:
+
+- **Total Time** - Cumulative voice time in the selected period
+- **Average Daily Time** - Mean time per day with activity
+- **Current Streak** - Consecutive days with voice activity
+- **Most Active Day** - Day with the highest voice time
+
+<Info>
+  User stats can be viewed by anyone. Use the user selector to view another member's voice activity statistics.
+</Info>
+
+### Server Statistics
+
+When viewing server-wide stats, you can choose from three aggregation types:
+
+**Average Time:**
+- Shows average voice time per active user per day
+- Useful for understanding typical user engagement
+- Peak time shows the highest average
+
+**Total Time:**
+- Shows total voice time across all users per day
+- Indicates overall server voice activity
+- Peak shows the busiest day
+
+**Active Users:**
+- Shows number of unique users active each day
+- Tracks community growth and engagement
+- Peak shows the day with most participants
+
+### Interactive Controls
+
+**Time Range Buttons:**
+- Yearly, Monthly, Weekly, Hourly
+- Updates chart and statistics instantly
+
+**Stat Type Buttons (Server View):**
+- Unique Users, Total Time, Average Time
+- Changes the metric displayed in the chart
+
+**Toggle Data Mode:**
+- Switch between user stats and server stats
+- Maintains current time range selection
+
+**User Selector (User View):**
+- Dropdown to select any server member
+- View stats for other users
+
+<Tip>
+  Charts are regenerated each time you change settings, so there may be a brief delay when switching between views.
+</Tip>
+
+## Data Storage
+
+### Database Schema
+
+**Voice Sessions Table:**
+```sql
+CREATE TABLE voice_sessions (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    guild_id INTEGER NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT,
+    duration INTEGER
+);
+```
+
+**Daily Activity Aggregation:**
+- Pre-computed daily statistics for performance
+- Cached in `voice_daily_activity` table
+- Includes: day, user_id, guild_id, total_seconds
+
+**Guild Daily Stats:**
+- Server-level aggregates by day
+- Supports multiple stat types (average, total, user count)
+- Indexed for fast time-range queries
+
+### Data Retention
+
+All voice tracking data is retained indefinitely:
+- Historical sessions are never deleted
+- Allows for "All Time" leaderboards and stats
+- Users can see their complete voice history
+
+<Info>
+  Server admins can disable voice tracking entirely via `/vc settings` if desired.
+</Info>
+
+## Commands
+
+<CardGroup cols={2}>
+  <Card title="/vc leaderboard" icon="trophy">
+    View the voice activity leaderboard with customizable time ranges
+  </Card>
+  <Card title="/vc stats" icon="chart-line">
+    Display detailed voice activity statistics with visual charts
+  </Card>
+  <Card title="/vc settings" icon="gear">
+    Configure voice tracking settings (admin only)
+  </Card>
+</CardGroup>
+
+## Performance Considerations
+
+**Heartbeat Efficiency:**
+- Single background task handles all guilds
+- Batched database writes every 60 seconds
+- Minimal memory footprint
+
+**Query Optimization:**
+- Indexed queries on user_id, guild_id, and timestamps
+- Pre-aggregated daily stats for common queries
+- Pagination for large leaderboards
+
+**Image Generation:**
+- Canvas rendering with hardware acceleration
+- Cached font loading
+- Compressed JPEG output for leaderboards
+- PNG output for charts
+
+<Accordion title="Technical Details: Heartbeat Implementation">
+  The heartbeat system uses Tokio for async task scheduling:
+  
+  ```rust
+  loop {
+      tokio::time::sleep(Duration::from_secs(60)).await;
+      
+      // Get all active sessions
+      let sessions = get_active_sessions().await;
+      
+      // Update each session
+      for session in sessions {
+          update_heartbeat(session).await;
+      }
+  }
+  ```
+  
+  This ensures voice tracking runs continuously without blocking other bot operations.
+</Accordion>

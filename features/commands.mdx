@@ -1,0 +1,304 @@
+---
+title: "Bot Commands"
+description: "Complete overview of all pwr-bot commands and features"
+---
+
+## Command Structure
+
+pwr-bot uses Discord's slash command system with organized command groups. All commands are invoked with `/` and provide autocomplete suggestions.
+
+<Info>
+  Commands are organized using the **Cog pattern**, where each feature module provides a set of related commands. See `src/bot/commands.rs` for implementation details.
+</Info>
+
+## Command Categories
+
+### Feed Management
+
+Manage subscriptions to anime and manga feeds.
+
+<CardGroup cols={2}>
+  <Card title="/feed subscribe" icon="plus" href="/features/feed-subscriptions#creating-subscriptions">
+    Subscribe to AniList, MangaDex, or Comick feeds
+    
+    **Parameters:**
+    - `url` - Source URL from supported platform
+    - `send_into` - Where to send notifications (Server/DM)
+  </Card>
+  
+  <Card title="/feed unsubscribe" icon="minus" href="/features/feed-subscriptions">
+    Unsubscribe from feeds
+    
+    **Parameters:**
+    - `url` - Source URL to unsubscribe from
+    - `send_into` - Subscription type (Server/DM)
+  </Card>
+  
+  <Card title="/feed list" icon="list" href="/features/feed-subscriptions">
+    View all your active subscriptions
+    
+    **Parameters:**
+    - `send_into` - Filter by subscription type (optional)
+  </Card>
+  
+  <Card title="/feed settings" icon="gear" href="/features/feed-subscriptions">
+    Configure server feed settings (admin only)
+    
+    **Settings:**
+    - Notification channel
+    - Subscribe/unsubscribe role requirements
+  </Card>
+</CardGroup>
+
+### Voice Channel Tracking
+
+Track and analyze voice channel activity.
+
+<CardGroup cols={2}>
+  <Card title="/vc leaderboard" icon="trophy" href="/features/voice-tracking#leaderboards">
+    View ranked voice activity leaderboard
+    
+    **Parameters:**
+    - `time_range` - Filter by time period (optional)
+    
+    **Features:**
+    - Server leaderboard or Voice Partners mode
+    - Paginated results (10 per page)
+    - Your current rank display
+  </Card>
+  
+  <Card title="/vc stats" icon="chart-line" href="/features/voice-tracking#statistics-visualization">
+    Display voice activity statistics with charts
+    
+    **Parameters:**
+    - `time_range` - Time period to analyze (optional)
+    - `user` - User to view stats for (optional)
+    - `statistic` - Stat type for server view (optional)
+    
+    **Features:**
+    - Contribution grid (yearly view)
+    - Line charts (hourly, weekly, monthly)
+    - Toggle between user/server stats
+  </Card>
+  
+  <Card title="/vc settings" icon="gear" href="/features/voice-tracking">
+    Configure voice tracking settings (admin only)
+    
+    **Settings:**
+    - Enable/disable voice tracking
+    - AFK channel behavior
+  </Card>
+</CardGroup>
+
+### Server Management
+
+General bot configuration and server setup.
+
+<CardGroup cols={2}>
+  <Card title="/settings" icon="sliders">
+    Configure server-wide bot settings (admin only)
+    
+    **Categories:**
+    - Feed notification settings
+    - Voice tracking settings
+    - Role permissions
+  </Card>
+  
+  <Card title="/register" icon="user-plus">
+    Register the server for bot features
+    
+    Creates necessary database entries for the server to use feed subscriptions and voice tracking.
+  </Card>
+  
+  <Card title="/unregister" icon="user-minus">
+    Unregister the server (admin only)
+    
+    Removes all server data including subscriptions, settings, and voice tracking history.
+  </Card>
+  
+  <Card title="/register_owner" icon="crown">
+    Owner-only registration command
+    
+    Used for manual server registration by bot owner.
+  </Card>
+</CardGroup>
+
+### Bot Information
+
+Get information about the bot.
+
+<CardGroup cols={2}>
+  <Card title="/about" icon="info-circle">
+    Display bot information and statistics
+    
+    **Shows:**
+    - Bot version and uptime
+    - Server count
+    - Developer credits
+    - Links to documentation and support
+  </Card>
+  
+  <Card title="/welcome" icon="hand-wave">
+    Display welcome message for new users
+    
+    Provides an overview of bot features and getting started guide.
+  </Card>
+</CardGroup>
+
+### Utility Commands
+
+Developer and debugging commands.
+
+<CardGroup cols={2}>
+  <Card title="/dump_db" icon="database">
+    Export database (owner only)
+    
+    Creates a backup of the SQLite database for debugging or migration purposes.
+  </Card>
+</CardGroup>
+
+## Command Permissions
+
+### Permission Levels
+
+**Everyone:**
+- `/feed subscribe` (with optional role requirements)
+- `/feed unsubscribe` (with optional role requirements)
+- `/feed list`
+- `/vc leaderboard`
+- `/vc stats`
+- `/about`
+- `/welcome`
+
+**Server Admins:**
+- `/settings`
+- `/feed settings`
+- `/vc settings`
+- `/register`
+- `/unregister`
+
+**Bot Owner:**
+- `/dump_db`
+- `/register_owner`
+
+<Tip>
+  Server admins can configure role-based permissions for feed subscription commands via `/feed settings`. This allows you to restrict who can subscribe the server to feeds.
+</Tip>
+
+## Command Context
+
+Commands behave differently based on context:
+
+### Server Context
+
+When used in a server:
+- Feed commands can create server-wide subscriptions
+- Voice commands track server voice activity
+- Settings commands affect the server configuration
+
+### DM Context
+
+When used in DMs:
+- Feed commands create personal DM subscriptions
+- Voice stats show your personal activity across all servers
+- Server-specific commands are unavailable
+
+<Info>
+  Some commands like `/vc leaderboard` are server-only, while others like `/feed subscribe` work in both contexts with different behavior.
+</Info>
+
+## Error Handling
+
+The bot provides clear error messages for common issues:
+
+**Permission Errors:**
+```
+You don't have permission to use this command.
+Required role: @FeedManager
+```
+
+**Configuration Errors:**
+```
+Server feed settings are not configured.
+A server admin must run /settings to configure a notification channel first.
+```
+
+**Validation Errors:**
+```
+Invalid URL format. Please provide a valid URL from:
+- AniList (https://anilist.co/...)
+- MangaDex (https://mangadex.org/...)
+- Comick (https://comick.io/...)
+```
+
+## Response Types
+
+### Ephemeral vs Public
+
+**Ephemeral Responses** (only you can see):
+- Error messages
+- Configuration commands
+- Personal settings
+
+**Public Responses** (everyone can see):
+- Leaderboards
+- Statistics
+- Feed notifications
+
+### Interactive Components
+
+Many commands use Discord's interactive components:
+
+**Buttons:**
+- Time range selection (leaderboards, stats)
+- Pagination (previous/next)
+- Mode toggles (server/user stats)
+
+**Select Menus:**
+- User selection (view other users' stats)
+- Time range filters (dropdown)
+
+**Timeouts:**
+- Interactive components expire after 120 seconds
+- Commands can be re-run to reset the timeout
+
+<Tip>
+  If buttons stop working, the command interaction has timed out. Simply run the command again to continue.
+</Tip>
+
+## Command Implementation
+
+All commands follow the Poise framework pattern:
+
+<Accordion title="Adding New Commands">
+  To add a new command to pwr-bot:
+  
+  1. Create a command module in `src/bot/commands/`
+  2. Implement the command with `#[poise::command]` attribute
+  3. Add the command to `Cogs::commands()` in `src/bot/commands.rs`
+  
+  Example:
+  ```rust
+  #[poise::command(slash_command)]
+  pub async fn my_command(ctx: Context<'_>) -> Result<(), Error> {
+      ctx.say("Hello!").await?;
+      Ok(())
+  }
+  ```
+  
+  See `AGENTS.md` in the source repository for detailed guidelines.
+</Accordion>
+
+## Command Response Times
+
+Typical response times for different command types:
+
+- **Simple commands** (`/about`, `/welcome`) - Instant
+- **Database queries** (`/feed list`) - Under 100ms
+- **API requests** (`/feed subscribe`) - 500ms - 2s
+- **Image generation** (`/vc leaderboard`, `/vc stats`) - 1-3s
+- **Batch operations** - 2-5s per item
+
+<Info>
+  Commands that take longer than 3 seconds use Discord's "defer" mechanism to show a loading state and prevent timeout errors.
+</Info>

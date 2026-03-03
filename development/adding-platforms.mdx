@@ -1,0 +1,433 @@
+---
+title: Adding Platforms
+description: Learn how to integrate new feed platforms by implementing the Platform trait
+---
+
+Feed platforms (like MangaDex, AniList, Comick) allow pwr-bot to monitor content from different sources. This guide shows you how to add a new platform.
+
+## Overview
+
+Platforms are managed through:
+- **Platform Trait** (`src/feed.rs:124-174`) - Interface all platforms must implement
+- **Platform Registry** (`src/feed/platforms.rs`) - Central registry of all platforms
+- **Individual Implementations** - One file per platform (e.g., `anilist_platform.rs`)
+
+## Platform Trait
+
+All platforms must implement this trait from `src/feed.rs:124-137`:
+
+```rust
+#[async_trait]
+pub trait Platform: Send + Sync {
+    /// Fetch latest item of a feed source based on items id.
+    async fn fetch_latest(&self, items_id: &str) -> Result<FeedItem, FeedError>;
+    
+    /// Fetch feed source information based on source id.
+    async fn fetch_source(&self, source_id: &str) -> Result<FeedSource, FeedError>;
+    
+    /// Extract source id of a source url.
+    fn get_id_from_source_url<'a>(&self, source_url: &'a str) -> Result<&'a str, FeedError>;
+    
+    /// Get source url from a source id.
+    fn get_source_url_from_id(&self, source_id: &str) -> String;
+    
+    fn get_base(&self) -> &BasePlatform;
+}
+```
+
+## Key Data Structures
+
+<CodeGroup>
+
+```rust FeedSource (src/feed.rs:107-121)
+/// Information about a content source
+pub struct FeedSource {
+    /// Identifier for this feed source
+    pub id: String,
+    /// Identifier to get items for this feed source
+    pub items_id: String,
+    /// Human readable name, e.g., "One Piece"
+    pub name: String,
+    /// Description of the source
+    pub description: String,
+    /// URL of the source
+    pub source_url: String,
+    /// Cover/Avatar URL
+    pub image_url: Option<String>,
+}
+```
+
+```rust FeedItem (src/feed.rs:97-105)
+/// A single update from a feed source
+pub struct FeedItem {
+    /// Identifier for this item
+    pub id: String,
+    /// Title like "Chapter 100" or "Episode 12"
+    pub title: String,
+    /// When the update was published
+    pub published: DateTime<Utc>,
+}
+```
+
+```rust PlatformInfo (src/feed.rs:26-43)
+/// Platform metadata
+pub struct PlatformInfo {
+    pub name: String,              // "MangaDex", "AniList Anime"
+    pub feed_item_name: String,    // "Episode", "Chapter"
+    pub api_hostname: String,      // "api.feed.tld"
+    pub api_domain: String,        // "feed.tld"
+    pub api_url: String,           // "https://api.feed.tld"
+    pub copyright_notice: String,  // "© Platform 2025"
+    pub logo_url: String,          // Platform logo URL
+    pub tags: String,              // "series", "videos", etc.
+}
+```
+
+</CodeGroup>
+
+## Step-by-Step: Creating a New Platform
+
+<Steps>
+
+### Create the platform file
+
+Create `src/feed/myplatform_platform.rs`:
+
+```rust
+use std::hash::{Hash, Hasher};
+
+use async_trait::async_trait;
+use chrono::DateTime;
+
+use crate::feed::{
+    BasePlatform, FeedItem, FeedSource, Platform, PlatformInfo,
+    error::FeedError,
+};
+
+/// MyPlatform integration.
+pub struct MyPlatformPlatform {
+    pub base: BasePlatform,
+    client: wreq::Client,
+}
+
+impl MyPlatformPlatform {
+    /// Creates a new MyPlatform platform.
+    pub fn new() -> Self {
+        let info = PlatformInfo {
+            name: "MyPlatform".to_string(),
+            feed_item_name: "Chapter".to_string(),
+            api_hostname: "api.myplatform.com".to_string(),
+            api_domain: "myplatform.com".to_string(),
+            api_url: "https://api.myplatform.com".to_string(),
+            copyright_notice: "© MyPlatform 2025".to_string(),
+            logo_url: "https://myplatform.com/logo.png".to_string(),
+            tags: "series".to_string(),
+        };
+        
+        let client = wreq::Client::builder()
+            .emulation(wreq_util::Emulation::Chrome137)
+            .build()
+            .unwrap();
+
+        Self {
+            base: BasePlatform::new(info),
+            client,
+        }
+    }
+}
+```
+
+### Implement the Platform trait
+
+```rust
+#[async_trait]
+impl Platform for MyPlatformPlatform {
+    async fn fetch_latest(&self, items_id: &str) -> Result<FeedItem, FeedError> {
+        // Make API request to get latest item
+        let url = format!("{}/items/{}", self.base.info.api_url, items_id);
+        let response = self.client.get(&url).send().await?;
+        let body = response.text().await?;
+        let json: serde_json::Value = serde_json::from_str(&body)?;
+        
+        // Parse response
+        let id = json["id"].as_str()
+            .ok_or_else(|| FeedError::MissingField { 
+                field: "id".to_string() 
+            })?
+            .to_string();
+            
+        let title = json["title"].as_str()
+            .ok_or_else(|| FeedError::MissingField { 
+                field: "title".to_string() 
+            })?
+            .to_string();
+            
+        let timestamp = json["published_at"].as_i64()
+            .ok_or_else(|| FeedError::MissingField { 
+                field: "published_at".to_string() 
+            })?;
+            
+        let published = DateTime::from_timestamp(timestamp, 0)
+            .ok_or_else(|| FeedError::InvalidTimestamp { timestamp })?;
+        
+        Ok(FeedItem { id, title, published })
+    }
+    
+    async fn fetch_source(&self, source_id: &str) -> Result<FeedSource, FeedError> {
+        // Make API request to get source info
+        let url = format!("{}/sources/{}", self.base.info.api_url, source_id);
+        let response = self.client.get(&url).send().await?;
+        let body = response.text().await?;
+        let json: serde_json::Value = serde_json::from_str(&body)?;
+        
+        // Parse response
+        Ok(FeedSource {
+            id: source_id.to_string(),
+            items_id: source_id.to_string(),
+            name: json["name"].as_str().unwrap_or("").to_string(),
+            description: json["description"].as_str().unwrap_or("").to_string(),
+            source_url: self.get_source_url_from_id(source_id),
+            image_url: json["image"].as_str().map(String::from),
+        })
+    }
+    
+    fn get_id_from_source_url<'a>(&self, url: &'a str) -> Result<&'a str, FeedError> {
+        // Extract ID from URL path
+        // Example: https://myplatform.com/series/123 -> "123"
+        self.base.get_nth_path_from_url(url, 1)
+    }
+    
+    fn get_source_url_from_id(&self, id: &str) -> String {
+        format!("https://{}/series/{}", self.base.info.api_domain, id)
+    }
+    
+    fn get_base(&self) -> &BasePlatform {
+        &self.base
+    }
+}
+
+// Required for platform registry
+impl PartialEq for MyPlatformPlatform {
+    fn eq(&self, other: &Self) -> bool {
+        self.base.info.api_url == other.base.info.api_url
+    }
+}
+
+impl Eq for MyPlatformPlatform {}
+
+impl Hash for MyPlatformPlatform {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.base.info.api_url.hash(state);
+    }
+}
+```
+
+### Add module declaration
+
+In `src/feed.rs:12-16`, add your platform module:
+
+```rust
+pub mod anilist_platform;
+pub mod comick_platform;
+pub mod mangadex_platform;
+pub mod myplatform_platform;  // Add this line
+pub mod platforms;
+```
+
+### Register in platforms.rs
+
+Update `src/feed/platforms.rs` to include your platform:
+
+<CodeGroup>
+
+```rust Imports (src/feed/platforms.rs:5-9)
+use crate::feed::Platform;
+use crate::feed::anilist_platform::AniListPlatform;
+use crate::feed::comick_platform::ComickPlatform;
+use crate::feed::mangadex_platform::MangaDexPlatform;
+use crate::feed::myplatform_platform::MyPlatformPlatform;  // Add this
+```
+
+```rust Registry Struct (src/feed/platforms.rs:12-17)
+pub struct Platforms {
+    platforms: Vec<Arc<dyn Platform>>,
+    pub anilist: Arc<AniListPlatform>,
+    pub mangadex: Arc<MangaDexPlatform>,
+    pub comick: Arc<ComickPlatform>,
+    pub myplatform: Arc<MyPlatformPlatform>,  // Add this
+}
+```
+
+```rust Constructor (src/feed/platforms.rs:20-36)
+impl Platforms {
+    pub fn new() -> Self {
+        let anilist = Arc::new(AniListPlatform::new());
+        let mangadex = Arc::new(MangaDexPlatform::new());
+        let comick = Arc::new(ComickPlatform::new());
+        let myplatform = Arc::new(MyPlatformPlatform::new());  // Add this
+
+        let mut _self = Self {
+            platforms: Vec::new(),
+            anilist,
+            mangadex,
+            comick,
+            myplatform,  // Add this
+        };
+
+        _self.add_platform(_self.anilist.clone());
+        _self.add_platform(_self.mangadex.clone());
+        _self.add_platform(_self.comick.clone());
+        _self.add_platform(_self.myplatform.clone());  // Add this
+        _self
+    }
+}
+```
+
+</CodeGroup>
+
+</Steps>
+
+## Real-World Example: AniList Platform
+
+Here's how AniList implements GraphQL queries (`src/feed/anilist_platform.rs:208-239`):
+
+```rust
+#[async_trait]
+impl Platform for AniListPlatform {
+    async fn fetch_latest(&self, id: &str) -> Result<FeedItem, FeedError> {
+        let query = r#"
+        query ($id: Int) {
+          AiringSchedule(mediaId: $id, sort: EPISODE_DESC, notYetAired: false) {
+            airingAt
+            episode
+            id
+          }
+        }
+        "#;
+        let response_json = self.request(&source_id, query).await?;
+
+        let airing_schedule = self.get_airing_schedule(&response_json, &source_id)?;
+        let timestamp = self.get_timestamp(airing_schedule)?;
+        let title = self.get_episode(airing_schedule)?;
+        let id = self.get_id(airing_schedule)?;
+
+        let published = DateTime::from_timestamp(timestamp, 0)
+            .ok_or_else(|| FeedError::InvalidTimestamp { timestamp })?;
+
+        Ok(FeedItem { id, title, published })
+    }
+    
+    // ... other methods
+}
+```
+
+## Rate Limiting
+
+Many APIs require rate limiting. Use the `governor` crate:
+
+```rust src/feed/anilist_platform.rs:27-31
+use governor::{Quota, RateLimiter};
+use std::num::NonZeroU32;
+
+pub struct MyPlatformPlatform {
+    pub base: BasePlatform,
+    client: wreq::Client,
+    limiter: RateLimiter<NotKeyed, InMemoryState, QuantaClock>,
+}
+
+impl MyPlatformPlatform {
+    pub fn new() -> Self {
+        // 30 requests per minute
+        let limiter = RateLimiter::direct(
+            Quota::per_minute(NonZeroU32::new(30).unwrap())
+        );
+        // ... rest of initialization
+    }
+    
+    async fn send(&self, request: wreq::RequestBuilder) -> Result<wreq::Response, wreq::Error> {
+        // Wait if rate limited
+        self.limiter.until_ready().await;
+        
+        let req = request.build()?;
+        self.client.execute(req).await
+    }
+}
+```
+
+## Error Handling
+
+Use the predefined error types from `FeedError`:
+
+```rust
+use crate::feed::error::FeedError;
+
+// Item not found
+return Err(FeedError::ItemNotFound {
+    source_id: id.to_string(),
+});
+
+// Source not found
+return Err(FeedError::SourceNotFound {
+    source_id: id.to_string(),
+});
+
+// Missing field in API response
+return Err(FeedError::MissingField {
+    field: "data.title".to_string(),
+});
+
+// Invalid timestamp
+return Err(FeedError::InvalidTimestamp { timestamp });
+
+// API error
+return Err(FeedError::ApiError {
+    message: error_msg,
+});
+```
+
+## Testing Your Platform
+
+Create tests in `tests/mock_platforms_test.rs` using `httpmock`:
+
+```rust
+use httpmock::MockServer;
+use pwr_bot::feed::Platform;
+use pwr_bot::feed::myplatform_platform::MyPlatformPlatform;
+
+#[tokio::test]
+async fn test_myplatform_fetch_source() {
+    let server = MockServer::start();
+    let mut platform = MyPlatformPlatform::new();
+    platform.base.info.api_url = server.url("");
+
+    let response_body = r#"{
+        "id": "123",
+        "name": "Test Series",
+        "description": "A test series"
+    }"#;
+
+    let mock = server.mock(|when, then| {
+        when.method(GET).path("/sources/123");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(response_body);
+    });
+
+    let source = platform.fetch_source("123")
+        .await
+        .expect("Failed to fetch source");
+
+    mock.assert();
+    assert_eq!(source.id, "123");
+    assert_eq!(source.name, "Test Series");
+}
+```
+
+<Note>
+Store mock API responses in `tests/responses/` directory for better organization.
+</Note>
+
+## Related Documentation
+
+- [Testing Guidelines](/development/testing) - Learn how to write comprehensive platform tests
+- [Architecture Overview](/development/architecture) - Learn about error handling patterns

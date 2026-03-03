@@ -1,0 +1,599 @@
+---
+title: Database Schema
+description: Database structure, migrations, and SQLx usage in pwr-bot
+---
+
+## Overview
+
+pwr-bot uses SQLite as its database with SQLx for type-safe, compile-time verified SQL queries. All schema changes are managed through migrations.
+
+## Database Schema
+
+### Feeds
+
+Stores feed metadata for subscriptions.
+
+```sql
+CREATE TABLE feeds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT NULL,
+    platform_id TEXT NOT NULL,      -- Platform identifier (e.g., "mangadex")
+    source_id TEXT NOT NULL,        -- Platform-specific source ID
+    items_id TEXT NOT NULL,         -- Platform-specific items endpoint
+    source_url TEXT NOT NULL,       -- Original source URL
+    cover_url TEXT DEFAULT NULL,
+    tags TEXT DEFAULT NULL,
+    UNIQUE(platform_id, source_id),
+    UNIQUE(source_url)
+);
+```
+
+**Key fields:**
+- `platform_id` + `source_id` - Unique identifier across platforms
+- `items_id` - Used to fetch latest items from the platform
+- `tags` - Comma-separated tags for categorization
+
+### Feed Items
+
+Stores the history of feed updates.
+
+```sql
+CREATE TABLE feed_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feed_id INTEGER NOT NULL,
+    description TEXT NOT NULL,      -- Item title/description
+    published TIMESTAMP NOT NULL,
+    UNIQUE(feed_id, published),
+    FOREIGN KEY (feed_id) REFERENCES feeds(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+```
+
+**Purpose:** Track when new content is published to detect updates.
+
+### Subscribers
+
+Represents entities that can subscribe to feeds.
+
+```sql
+CREATE TABLE subscribers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,             -- 'dm' or 'guild'
+    target_id TEXT NOT NULL,        -- User ID or Guild ID
+    UNIQUE(type, target_id)
+);
+```
+
+**Subscriber types:**
+- `dm` - Direct message to a user (target_id = user_id)
+- `guild` - Guild channel (target_id = guild_id)
+
+### Feed Subscriptions
+
+Junction table for many-to-many relationship between feeds and subscribers.
+
+```sql
+CREATE TABLE feed_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feed_id INTEGER NOT NULL,
+    subscriber_id INTEGER NOT NULL,
+    UNIQUE(feed_id, subscriber_id),
+    FOREIGN KEY (feed_id) REFERENCES feeds(id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (subscriber_id) REFERENCES subscribers(id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+);
+```
+
+**Cascade behavior:** Deleting a feed or subscriber automatically removes subscriptions.
+
+### Voice Sessions
+
+Tracks user voice channel activity.
+
+```sql
+CREATE TABLE voice_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    guild_id INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    join_time TIMESTAMP NOT NULL,
+    leave_time TIMESTAMP NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 0,  -- Boolean flag
+    UNIQUE(user_id, channel_id, join_time)
+);
+```
+
+**Migration:** `migrations/20260105094744_add_voice_sessions.up.sql`
+
+**Key features:**
+- `is_active` - Tracks currently active sessions for crash recovery
+- `leave_time` - Updated when user leaves or bot shuts down gracefully
+- Unique constraint prevents duplicate session records
+
+### Server Settings
+
+Stores per-guild configuration.
+
+```sql
+CREATE TABLE server_settings (
+    guild_id INTEGER PRIMARY KEY,
+    settings TEXT NOT NULL          -- JSON-encoded settings
+);
+```
+
+**Migration:** `migrations/20251229162924_add_server_settings.up.sql`
+
+**Settings format:**
+```json
+{
+  "channel_id": "123456789",
+  "features": {
+    "feed_updates": true
+  }
+}
+```
+
+### Bot Meta
+
+Internal metadata for the bot.
+
+```sql
+CREATE TABLE bot_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+```
+
+**Migration:** `migrations/20260220074756_add_bot_meta.up.sql`
+
+**Usage:** Store bot startup time, version info, and crash recovery data.
+
+## SQLx Usage
+
+### Type-Safe Queries
+
+SQLx provides compile-time verification of SQL queries:
+
+```rust
+use sqlx::query_as;
+
+// Query is checked at compile time
+let feed: FeedEntity = sqlx::query_as(
+    "SELECT * FROM feeds WHERE id = ?"
+)
+.bind(feed_id)
+.fetch_one(&pool)
+.await?;
+```
+
+### Query Macros
+
+The codebase uses the `impl_table!` macro to generate CRUD operations:
+
+**Location:** `src/repository/table.rs:130-247`
+
+```rust
+impl_table!(
+    FeedTable,
+    FeedEntity,
+    "feeds",
+    id,
+    i32,
+    i32,
+    r#"CREATE TABLE IF NOT EXISTS feeds (...) "#,
+    "name, description, platform_id, ...",
+    "?, ?, ?, ...",
+    "name = ?, description = ?, ...",
+    [name, description, platform_id, source_id, ...]
+);
+```
+
+**Generated methods:**
+- `select_all()` - Get all records
+- `select(id)` - Get by ID
+- `insert(model)` - Insert new record
+- `update(model)` - Update existing record
+- `delete(id)` - Delete by ID
+- `replace(model)` - Insert or replace
+
+### Custom Queries
+
+Complex queries are implemented as table methods:
+
+```rust
+impl FeedSubscriptionTable {
+    pub async fn select_paginated_with_latest_by_subscriber_id(
+        &self,
+        subscriber_id: i32,
+        page: impl Into<u32>,
+        per_page: impl Into<u32>,
+    ) -> Result<Vec<FeedWithLatestItemRow>, DatabaseError> {
+        let page: u32 = page.into();
+        let per_page: u32 = per_page.into();
+        let limit = per_page;
+        let offset = per_page * page;
+
+        Ok(sqlx::query_as::<_, FeedWithLatestItemRow>(
+            r#"
+            SELECT 
+                f.id, f.name, f.description, ...,
+                fi.id as item_id, fi.description as item_description, ...
+            FROM feed_subscriptions fs
+            JOIN feeds f ON fs.feed_id = f.id
+            LEFT JOIN feed_items fi ON fi.id = (
+                SELECT id FROM feed_items 
+                WHERE feed_id = f.id 
+                ORDER BY published DESC 
+                LIMIT 1
+            )
+            WHERE fs.subscriber_id = ?
+            ORDER BY f.name
+            LIMIT ? OFFSET ?
+            "#
+        )
+        .bind(subscriber_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.base.pool)
+        .await?)
+    }
+}
+```
+
+**Location:** `src/repository/table.rs:564-596`
+
+### Parameter Binding
+
+The `BindParam` trait handles SQLite type conversions:
+
+```rust
+pub trait BindParam<'q> {
+    fn bind_param<O>(
+        self,
+        query: sqlx::query::QueryAs<'q, sqlx::Sqlite, O, SqliteArguments<'q>>,
+    ) -> sqlx::query::QueryAs<'q, sqlx::Sqlite, O, SqliteArguments<'q>>;
+}
+
+// Special handling for u64 -> i64 conversion
+impl<'q> BindParam<'q> for &'q u64 {
+    fn bind_param<O>(self, query: ...) -> ... {
+        query.bind(*self as i64)  // SQLite uses i64
+    }
+}
+```
+
+**Location:** `src/repository/table.rs:56-128`
+
+## Creating Migrations
+
+### Generate Migration
+
+Use SQLx CLI to create a new migration:
+
+```bash
+cargo sqlx migrate add <migration_name>
+```
+
+**Example:**
+```bash
+cargo sqlx migrate add add_feed_tags
+```
+
+This creates two files:
+- `migrations/<timestamp>_add_feed_tags.up.sql` - Apply changes
+- `migrations/<timestamp>_add_feed_tags.down.sql` - Revert changes
+
+### Writing Migrations
+
+<Steps>
+  <Step title="Write UP migration">
+    Define the schema changes to apply:
+    
+    ```sql
+    -- migrations/20260301_add_feed_tags.up.sql
+    ALTER TABLE feeds ADD COLUMN tags TEXT DEFAULT NULL;
+    CREATE INDEX idx_feeds_tags ON feeds(tags);
+    ```
+  </Step>
+  
+  <Step title="Write DOWN migration">
+    Define how to revert the changes:
+    
+    ```sql
+    -- migrations/20260301_add_feed_tags.down.sql
+    DROP INDEX idx_feeds_tags;
+    ALTER TABLE feeds DROP COLUMN tags;
+    ```
+    
+    <Info>
+      SQLite has limited ALTER TABLE support. You may need to recreate tables.
+    </Info>
+  </Step>
+  
+  <Step title="Test migration">
+    Apply and revert the migration:
+    
+    ```bash
+    # Apply
+    cargo sqlx migrate run
+    
+    # Revert
+    cargo sqlx migrate revert
+    ```
+  </Step>
+</Steps>
+
+### Migration Best Practices
+
+<Accordion title="Make migrations reversible">
+  Always write proper DOWN migrations. This allows rollback if issues occur in production.
+  
+  ```sql
+  -- Bad: No way to restore data
+  DROP TABLE old_data;
+  
+  -- Good: Rename first, drop later
+  ALTER TABLE old_data RENAME TO old_data_backup;
+  ```
+</Accordion>
+
+<Accordion title="Use transactions">
+  Wrap complex migrations in transactions:
+  
+  ```sql
+  BEGIN TRANSACTION;
+  
+  -- Multiple operations
+  ALTER TABLE ...
+  CREATE INDEX ...
+  UPDATE ...
+  
+  COMMIT;
+  ```
+</Accordion>
+
+<Accordion title="Preserve data">
+  When modifying tables, preserve existing data:
+  
+  ```sql
+  -- Create new table with updated schema
+  CREATE TABLE feeds_new (...);
+  
+  -- Copy data
+  INSERT INTO feeds_new SELECT * FROM feeds;
+  
+  -- Swap tables
+  DROP TABLE feeds;
+  ALTER TABLE feeds_new RENAME TO feeds;
+  ```
+</Accordion>
+
+<Accordion title="Add indexes for queries">
+  Create indexes for frequently queried columns:
+  
+  ```sql
+  CREATE INDEX idx_voice_sessions_guild_user 
+  ON voice_sessions(guild_id, user_id);
+  ```
+</Accordion>
+
+### Complex Migration Example
+
+The server settings migration demonstrates data transformation:
+
+**Migration:** `migrations/20251229162924_add_server_settings.up.sql`
+
+```sql
+-- 1. Create new table
+CREATE TABLE IF NOT EXISTS server_settings (
+    guild_id INTEGER PRIMARY KEY,
+    settings TEXT NOT NULL
+);
+
+-- 2. Migrate data from old schema
+INSERT OR IGNORE INTO server_settings (guild_id, settings)
+SELECT 
+    substr(target_id, 1, instr(target_id, ':') - 1),
+    '{"channel_id": "' || substr(target_id, instr(target_id, ':') + 1) || '"}'
+FROM subscribers 
+WHERE type = 'guild' AND instr(target_id, ':') > 0
+GROUP BY substr(target_id, 1, instr(target_id, ':') - 1);
+
+-- 3. Clean up old data
+UPDATE subscribers
+SET target_id = substr(target_id, 1, instr(target_id, ':') - 1)
+WHERE type = 'guild' AND instr(target_id, ':') > 0;
+```
+
+## Running Migrations
+
+### Manual Execution
+
+```bash
+# Apply all pending migrations
+cargo sqlx migrate run
+
+# Revert last migration
+cargo sqlx migrate revert
+
+# Show migration status
+cargo sqlx migrate info
+```
+
+### Automatic on Startup
+
+The bot runs migrations automatically:
+
+**Location:** `src/main.rs:94-96`
+
+```rust
+info!("Running database migrations...");
+db.run_migrations().await?;
+info!("Database setup complete ({:.2}s).", init_start.elapsed().as_secs_f64());
+```
+
+## Offline Mode
+
+SQLx supports offline compilation using prepared query metadata:
+
+### Prepare Queries
+
+```bash
+# Generate .sqlx/ metadata for offline builds
+cargo sqlx prepare
+```
+
+### CI/CD Usage
+
+In CI environments, set:
+
+```bash
+export SQLX_OFFLINE=true
+cargo test
+```
+
+**GitHub Actions:** This is automatically configured in CI workflows.
+
+## Entity Models
+
+Database entities use Rust structs with SQLx derives:
+
+```rust
+use sqlx::FromRow;
+
+#[derive(Debug, Clone, FromRow)]
+pub struct FeedEntity {
+    pub id: i32,
+    pub name: String,
+    pub description: Option<String>,
+    pub platform_id: String,
+    pub source_id: String,
+    pub items_id: String,
+    pub source_url: String,
+    pub cover_url: String,
+    pub tags: Option<String>,
+}
+```
+
+**Location:** `src/entity/`
+
+## Advanced Queries
+
+### Leaderboard Query
+
+Calculates total voice time including active sessions:
+
+```rust
+pub async fn get_leaderboard_opt(
+    &self,
+    opts: &VoiceLeaderboardOpt,
+) -> Result<Vec<VoiceLeaderboardEntry>, DatabaseError> {
+    let query = r#"
+        SELECT 
+            user_id, 
+            SUM(
+                CASE 
+                    WHEN is_active = 1 
+                    THEN strftime('%s', 'now') - strftime('%s', join_time)
+                    ELSE strftime('%s', leave_time) - strftime('%s', join_time)
+                END
+            ) as total_duration
+        FROM voice_sessions
+        WHERE guild_id = ?
+        GROUP BY user_id 
+        ORDER BY total_duration DESC 
+        LIMIT ? OFFSET ?
+    "#;
+    
+    // Query execution...
+}
+```
+
+**Location:** `src/repository/table.rs:696-745`
+
+**Features:**
+- Calculates duration for closed sessions
+- Uses current time for active sessions
+- Supports time range filtering
+- Pagination support
+
+### Partner Leaderboard
+
+Finds overlapping voice sessions between users:
+
+**Location:** `src/repository/table.rs:776-830`
+
+```sql
+SELECT 
+    v2.user_id, 
+    SUM(
+        strftime('%s', MIN(
+            CASE WHEN v1.is_active = 1 THEN CURRENT_TIMESTAMP ELSE v1.leave_time END, 
+            CASE WHEN v2.is_active = 1 THEN CURRENT_TIMESTAMP ELSE v2.leave_time END
+        )) - 
+        strftime('%s', MAX(v1.join_time, v2.join_time))
+    ) as total_duration
+FROM voice_sessions v1 
+JOIN voice_sessions v2 
+    ON v1.guild_id = v2.guild_id 
+    AND v1.channel_id = v2.channel_id 
+    AND v1.user_id != v2.user_id 
+    AND MAX(v1.join_time, v2.join_time) < MIN(...)
+WHERE v1.user_id = ?
+GROUP BY v2.user_id 
+ORDER BY total_duration DESC
+```
+
+**Algorithm:** Calculates intersection of session time ranges.
+
+## Database Maintenance
+
+### Vacuum
+
+SQLite benefits from periodic vacuuming:
+
+```bash
+sqlite3 pwr-bot.db "VACUUM;"
+```
+
+### Backup
+
+Create database backups:
+
+```bash
+# Simple copy (while bot is stopped)
+cp pwr-bot.db pwr-bot.db.backup
+
+# Online backup
+sqlite3 pwr-bot.db ".backup pwr-bot.db.backup"
+```
+
+## Troubleshooting
+
+<Accordion title="Migration failed">
+  Check migration SQL syntax and rollback:
+  
+  ```bash
+  cargo sqlx migrate revert
+  ```
+  
+  Fix the migration file and re-run.
+</Accordion>
+
+<Accordion title="Compile-time query errors">
+  Regenerate offline query metadata:
+  
+  ```bash
+  cargo sqlx prepare
+  ```
+</Accordion>
+
+<Accordion title="Database locked">
+  SQLite uses file-based locking. Ensure:
+  - Only one bot instance is running
+  - No other process has the database file open
+  - Check file permissions
+</Accordion>

@@ -1,0 +1,421 @@
+---
+title: Architecture
+description: System architecture and design patterns used in pwr-bot
+---
+
+## System Overview
+
+pwr-bot is built with Rust using an event-driven architecture. The application consists of several key components that work together to provide Discord bot functionality, feed subscriptions, and voice tracking.
+
+## Core Components
+
+### Bot Layer
+
+The bot layer (`src/bot/`) handles all Discord interactions using the Serenity and Poise frameworks.
+
+**Key responsibilities:**
+- Discord gateway connection
+- Command registration and handling
+- User interface views and interactions
+- Event forwarding to the event bus
+
+**Location:** `src/main.rs:133-159`
+
+```rust
+let mut bot = Bot::new(
+    config.clone(),
+    event_bus,
+    platforms,
+    services,
+    voice_subscriber,
+)
+.await?;
+
+bot.start();
+```
+
+### Services
+
+Services (`src/service/`) contain the business logic and orchestrate interactions between repositories and external systems.
+
+<Accordion title="FeedSubscriptionService">
+  Manages feed subscriptions, checks for updates, and handles subscription lifecycle.
+  
+  **Location:** `src/service/feed_subscription_service.rs`
+  
+  ```rust
+  pub struct FeedSubscriptionService {
+      pub db: Arc<Repository>,
+      pub platforms: Arc<Platforms>,
+      settings: Arc<SettingsService>,
+  }
+  ```
+  
+  **Key methods:**
+  - `subscribe()` - Create feed subscription
+  - `unsubscribe()` - Remove feed subscription  
+  - `check_feed_update()` - Poll feed for new content
+  - `get_or_create_feed()` - Fetch or create feed entity
+</Accordion>
+
+<Accordion title="VoiceTrackingService">
+  Tracks user voice channel activity and provides leaderboard data.
+  
+  **Location:** `src/service/voice_tracking_service.rs`
+  
+  **Features:**
+  - Session start/end tracking
+  - Leaderboard queries with time filters
+  - Partner leaderboard (who you talked with most)
+  - Daily activity statistics
+</Accordion>
+
+<Accordion title="SettingsService">
+  Manages server-specific configuration and settings.
+  
+  **Location:** `src/service/settings_service.rs`
+  
+  **Handles:**
+  - Per-guild settings storage
+  - Feature flags and preferences
+  - Channel configurations
+</Accordion>
+
+<Accordion title="InternalService">
+  Provides bot metadata and internal state management.
+  
+  **Location:** `src/service/internal_service.rs`
+  
+  **Manages:**
+  - Bot startup timestamps
+  - Crash recovery metadata
+  - Internal versioning
+</Accordion>
+
+**Services initialization:** `src/main.rs:104-106`
+
+```rust
+async fn setup_services(db: Arc<Repository>, platforms: Arc<Platforms>) -> Result<Arc<Services>> {
+    Ok(Arc::new(Services::new(db, platforms).await?))
+}
+```
+
+### Repositories
+
+Repositories (`src/repository/`) provide data access abstraction over SQLite using SQLx.
+
+**Structure:**
+- `Repository` - Root struct holding all table accessors
+- Table implementations using `impl_table!` macro
+- Type-safe database operations with compile-time SQL checking
+
+**Location:** `src/repository/table.rs`
+
+```rust
+// Table trait provides CRUD operations
+#[async_trait::async_trait]
+pub trait Table<T, ID>: TableBase {
+    async fn select_all(&self) -> Result<Vec<T>, DatabaseError>;
+    async fn insert(&self, model: &T) -> Result<ID, DatabaseError>;
+    async fn select(&self, id: &ID) -> Result<Option<T>, DatabaseError>;
+    async fn update(&self, model: &T) -> Result<(), DatabaseError>;
+    async fn delete(&self, id: &ID) -> Result<(), DatabaseError>;
+    async fn replace(&self, model: &T) -> Result<ID, DatabaseError>;
+}
+```
+
+**Tables:**
+- `FeedTable` - Feed metadata
+- `FeedItemTable` - Feed update history
+- `SubscriberTable` - Subscription targets (users/guilds)
+- `FeedSubscriptionTable` - Many-to-many feed subscriptions
+- `VoiceSessionsTable` - Voice activity records
+- `ServerSettingsTable` - Guild configuration
+- `BotMetaTable` - Internal metadata
+
+### Event Bus
+
+The event bus (`src/event/event_bus.rs`) implements a publish-subscribe pattern for decoupled event handling.
+
+**Design:**
+- Type-safe event publishing
+- Async subscriber registration
+- Automatic event distribution to all subscribers
+
+```rust
+pub struct EventBus {
+    subscribers: Subscribers,
+}
+
+impl EventBus {
+    pub fn register_subcriber<E, S>(&self, subscriber: Arc<S>) -> &Self
+    where
+        E: 'static + Send + Sync + Clone,
+        S: Subscriber<E> + Send + Sync + 'static,
+    {
+        // Registration logic
+    }
+    
+    pub fn publish<E>(&self, event: E) -> &Self
+    where
+        E: 'static + Send + Sync + Clone,
+    {
+        // Publishing logic
+    }
+}
+```
+
+**Event types:**
+- `FeedUpdateEvent` - New feed content available
+- `VoiceStateEvent` - Voice channel state change
+
+**Location:** `src/main.rs:47`, `src/event/event_bus.rs`
+
+### Subscribers
+
+Subscribers (`src/subscriber/`) respond to events published on the event bus.
+
+<Accordion title="DiscordDmSubscriber">
+  Sends feed updates to users via direct messages.
+  
+  **Location:** `src/subscriber/discord_dm_subscriber.rs`
+  
+  **Flow:**
+  1. Receives `FeedUpdateEvent`
+  2. Queries subscribers of type `Dm`
+  3. Sends DM to each subscriber
+</Accordion>
+
+<Accordion title="DiscordGuildSubscriber">
+  Posts feed updates to guild channels.
+  
+  **Location:** `src/subscriber/discord_guild_subscriber.rs`
+  
+  **Flow:**
+  1. Receives `FeedUpdateEvent`
+  2. Queries subscribers of type `Guild`
+  3. Posts message to configured channel
+</Accordion>
+
+<Accordion title="VoiceStateSubscriber">
+  Handles voice channel join/leave events.
+  
+  **Location:** `src/subscriber/voice_state_subscriber.rs`
+  
+  **Responsibilities:**
+  - Track session start/end times
+  - Update voice session records
+  - Calculate session duration
+</Accordion>
+
+**Registration:** `src/main.rs:161-178`
+
+```rust
+event_bus
+    .register_subcriber::<FeedUpdateEvent, _>(discord_dm_subscriber)
+    .register_subcriber::<FeedUpdateEvent, _>(discord_channel_subscriber)
+    .register_subcriber::<VoiceStateEvent, _>(voice_subscriber);
+```
+
+### Tasks
+
+Background tasks (`src/task/`) run continuously to perform periodic operations.
+
+<Accordion title="SeriesFeedPublisher">
+  Polls feeds for updates and publishes events when new content is detected.
+  
+  **Location:** `src/task/series_feed_publisher.rs`
+  
+  **Algorithm:**
+  1. Get all feeds tagged with "series"
+  2. For each feed, check for updates
+  3. If updated, publish `FeedUpdateEvent`
+  4. Distribute checks evenly across poll interval
+  
+  ```rust
+  pub struct SeriesFeedPublisher {
+      service: Arc<FeedSubscriptionService>,
+      event_bus: Arc<EventBus>,
+      poll_interval: Duration,
+      running: AtomicBool,
+  }
+  ```
+</Accordion>
+
+<Accordion title="VoiceHeartbeatManager">
+  Periodically updates voice session timestamps and handles crash recovery.
+  
+  **Location:** `src/task/voice_heartbeat.rs`
+  
+  **Responsibilities:**
+  - Update active session timestamps
+  - Detect and recover from bot crashes
+  - Close orphaned sessions
+</Accordion>
+
+## Design Patterns
+
+### Event-Driven Architecture
+
+pwr-bot uses an event-driven architecture to decouple components:
+
+```
+┌─────────────┐
+│   Discord   │
+│   Events    │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐     ┌──────────────┐
+│     Bot     │────▶│  Event Bus   │
+└─────────────┘     └──────┬───────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+           ▼               ▼               ▼
+    ┌──────────┐    ┌──────────┐    ┌──────────┐
+    │ DM Sub   │    │Guild Sub │    │Voice Sub │
+    └──────────┘    └──────────┘    └──────────┘
+```
+
+**Benefits:**
+- Loose coupling between components
+- Easy to add new event handlers
+- Testable in isolation
+
+### ViewEngine Pattern
+
+UI interactions use a ViewEngine pattern for stateful Discord views:
+
+**Components:**
+- `Action` - Trait for action enums
+- `ViewRender<T>` - Renders UI components and embeds
+- `ViewHandler<T>` - Handles user interactions and state transitions
+- `ViewEngine<T, H>` - Manages the interaction event loop
+
+**Location:** `src/bot/views.rs`
+
+This pattern is used extensively in commands with interactive UI like settings and welcome card configuration.
+
+### Repository Pattern
+
+Data access is abstracted through the repository pattern:
+
+```rust
+Repository
+  ├── feed: FeedTable
+  ├── feed_item: FeedItemTable
+  ├── subscriber: SubscriberTable
+  ├── feed_subscription: FeedSubscriptionTable
+  ├── voice_sessions: VoiceSessionsTable
+  ├── server_settings: ServerSettingsTable
+  └── bot_meta: BotMetaTable
+```
+
+**Advantages:**
+- Centralized data access
+- Type-safe queries
+- Compile-time SQL verification with SQLx
+
+### Service Layer Pattern
+
+Business logic is isolated in service classes:
+
+```
+Bot Commands ──▶ Services ──▶ Repositories ──▶ Database
+                    │
+                    ├──▶ External APIs
+                    └──▶ Event Bus
+```
+
+**Benefits:**
+- Reusable business logic
+- Easier testing
+- Clear separation of concerns
+
+## Initialization Flow
+
+The application initializes components in a specific order:
+
+<Steps>
+  <Step title="Load configuration">
+    Environment variables and config files are loaded.
+    
+    **Location:** `src/main.rs:80-88`
+  </Step>
+  
+  <Step title="Setup database">
+    SQLite connection pool is created and migrations run.
+    
+    **Location:** `src/main.rs:90-102`
+  </Step>
+  
+  <Step title="Initialize services">
+    Service layer is constructed with database and platform dependencies.
+    
+    **Location:** `src/main.rs:104-106`
+  </Step>
+  
+  <Step title="Setup voice tracking">
+    Voice heartbeat manager starts and performs crash recovery.
+    
+    **Location:** `src/main.rs:108-131`
+  </Step>
+  
+  <Step title="Start bot">
+    Discord bot connects and registers commands.
+    
+    **Location:** `src/main.rs:133-159`
+  </Step>
+  
+  <Step title="Register subscribers">
+    Event subscribers are registered to the event bus.
+    
+    **Location:** `src/main.rs:161-178`
+  </Step>
+  
+  <Step title="Start publishers">
+    Background tasks begin polling feeds.
+    
+    **Location:** `src/main.rs:180-203`
+  </Step>
+</Steps>
+
+## Module Structure
+
+The codebase is organized into logical modules:
+
+```
+src/
+├── main.rs          # Application entry point
+├── lib.rs           # Library root
+├── bot/             # Discord bot implementation
+├── config/          # Configuration management
+├── entity/          # Data models and entities
+├── error/           # Error types
+├── event/           # Event types and event bus
+├── feed/            # Feed platform integrations
+├── logging/         # Logging setup
+├── macros/          # Utility macros
+├── repository/      # Database access layer
+├── service/         # Business logic layer
+├── subscriber/      # Event subscribers
+└── task/            # Background tasks
+```
+
+## Testing Strategy
+
+- **Unit tests**: Test individual functions and methods
+- **Integration tests**: Test component interactions
+- **Common utilities**: Shared test helpers in `tests/common/`
+
+```rust
+#[tokio::test]
+async fn test_feed_update_detection() {
+    let service = setup_test_service().await;
+    let feed = create_test_feed().await;
+    
+    let result = service.check_feed_update(&feed).await;
+    assert!(matches!(result, Ok(FeedUpdateResult::Updated { .. })));
+}
+```

@@ -1,0 +1,328 @@
+---
+title: Settings Command
+description: Configure server features and settings
+---
+
+The `/settings` command provides a centralized interface for server administrators to configure bot features and manage server-wide settings.
+
+<Note>
+  This command requires server administrator permissions.
+</Note>
+
+## Overview
+
+The settings interface allows admins to:
+- Enable or disable bot features
+- Configure feature-specific settings
+- Manage active and inactive features
+- Access bot information
+
+---
+
+## Command Usage
+
+```bash
+/settings
+```
+
+**Requirements:**
+- Must be used in a server (not DMs)
+- Requires server administrator permissions
+- Opens an interactive settings menu
+
+---
+
+## Settings Interface
+
+The settings menu presents a hierarchical interface with three main sections:
+
+### 1. Active Features
+
+Shows all currently enabled features for the server:
+- **Feeds**: RSS feed subscription notifications
+- **Voice**: Voice channel activity tracking
+- **Welcome**: Welcome cards for new members
+
+**Actions:**
+- **Feature Settings Mode**: Click a feature button to configure that feature's specific settings
+- **Deactivate Features Mode**: Toggle to disable mode, then click features to deactivate them
+
+### 2. State Toggle
+
+Switch between two modes:
+
+<Accordion title="Feature Settings (default)">
+  **Button style**: Blue (Primary)
+  
+  **Purpose**: Configure individual features
+  
+  **Action**: Clicking an active feature opens its configuration page
+  
+  **Use case**: You want to adjust settings for an active feature
+</Accordion>
+
+<Accordion title="Deactivate Features">
+  **Button style**: Red (Danger)
+  
+  **Purpose**: Disable features
+  
+  **Action**: Clicking an active feature immediately disables it
+  
+  **Use case**: You want to temporarily or permanently disable a feature
+  
+  **Toggle back**: Click "Feature Settings" button to return to configuration mode
+</Accordion>
+
+### 3. Add Features
+
+Select menu showing inactive features that can be enabled:
+
+- Lists all features currently disabled for the server
+- Select one or more features to activate them
+- Newly activated features appear in the "Active Features" section
+- Shows "All features enabled" when no inactive features remain
+
+---
+
+## Available Features
+
+### Feeds
+
+**Description**: RSS feed subscription and notification system
+
+**Configuration**: Opens `/feed settings` view
+- Set notification channel
+- Configure role permissions
+- Enable/disable feed notifications
+
+**Navigation**: Settings > Feeds
+
+**Docs**: See [Feed Commands](/commands/feed)
+
+---
+
+### Voice
+
+**Description**: Voice channel activity tracking and statistics
+
+**Configuration**: Opens `/voice settings` view
+- Enable/disable voice tracking
+
+**Navigation**: Settings > Voice
+
+**Docs**: See [Voice Commands](/commands/voice)
+
+---
+
+### Welcome
+
+**Description**: Customizable welcome cards for new members
+
+**Configuration**: Opens `/welcome` settings view
+- Enable/disable welcome cards
+- Select welcome channel
+- Choose card template (1-12)
+- Set primary color
+- Manage welcome messages
+- Preview templates
+
+**Navigation**: Settings > Welcome
+
+**Features**:
+- Template variables for personalization
+- Multiple message rotation
+- Visual preview generation
+- Template selection (12 designs)
+
+---
+
+## Navigation
+
+The settings menu includes navigation buttons:
+
+- **Feature Buttons**: Click to configure (blue) or deactivate (red) based on current mode
+- **"Deactivate Features" / "Feature Settings"**: Toggle between modes
+- **"🛈 About"**: View bot information and statistics
+
+From feature-specific settings:
+- **"❮ Back"**: Return to main settings menu
+- **"🛈 About"**: View bot information
+
+---
+
+## Permission Requirements
+
+<ParamField path="User Permissions" type="permissions" required>
+  Requires server administrator permissions:
+  - Checked via `is_author_guild_admin()` function
+  - User must have admin rights in the server
+  - Cannot be used in DMs
+</ParamField>
+
+---
+
+## Settings Workflow
+
+<Accordion title="Initial server setup">
+  1. Admin runs `/settings`
+  2. View current feature status
+  3. Enable desired features using "Add Features" dropdown
+  4. Click each active feature to configure its specific settings:
+     - **Feeds**: Set notification channel and permissions
+     - **Voice**: Ensure tracking is enabled
+     - **Welcome**: Configure welcome channel, template, and messages
+  5. Settings are automatically saved
+</Accordion>
+
+<Accordion title="Enabling a new feature">
+  1. Open `/settings`
+  2. Find feature in "Add Features" dropdown
+  3. Select the feature
+  4. Feature appears in "Active Features"
+  5. Click the feature to configure it
+  6. Complete required configuration (e.g., channels)
+</Accordion>
+
+<Accordion title="Disabling a feature">
+  1. Open `/settings`
+  2. Click "Deactivate Features" button (turns red)
+  3. Click the feature you want to disable
+  4. Feature is immediately disabled
+  5. Click "Feature Settings" to return to normal mode
+  6. Or enable it again via "Add Features" dropdown
+</Accordion>
+
+<Accordion title="Modifying feature settings">
+  1. Open `/settings`
+  2. Ensure you're in "Feature Settings" mode (blue buttons)
+  3. Click the feature you want to configure
+  4. Adjust settings using the feature's interface
+  5. Changes are saved automatically
+  6. Click "❮ Back" to return to main settings
+</Accordion>
+
+---
+
+## Settings Persistence
+
+### Auto-save Behavior
+
+- **Feature Enable/Disable**: Saved immediately when toggled
+- **Feature-specific Settings**: Saved when exiting the view (after clicking Back or timeout)
+- **Multi-select**: Enabling multiple features at once is supported and saved
+
+### Settings Storage
+
+- Stored in `ServerSettings` entity per guild
+- Persisted to SQLite database
+- Settings structure:
+  ```rust
+  ServerSettings {
+    feeds: { enabled, channel_id, subscribe_role_id, unsubscribe_role_id }
+    voice: { enabled }
+    welcome: { enabled, channel_id, template_id, primary_color, messages }
+  }
+  ```
+
+---
+
+## Interactive Timeout
+
+The settings interface remains active for **120 seconds** after the last interaction.
+
+**Behavior:**
+- Countdown starts after command invocation
+- Resets with each button click or selection
+- After timeout:
+  - Buttons become disabled
+  - Settings remain saved
+  - Run `/settings` again to continue configuring
+
+---
+
+## Error Handling
+
+<Accordion title="Permission denied">
+  **Error**: Check fails if user is not a guild admin
+  
+  **Message**: Varies based on permission check implementation
+  
+  **Solution**: Only server administrators can access `/settings`
+</Accordion>
+
+<Accordion title="Guild only">
+  **Error**: `BotError::GuildOnlyCommand`
+  
+  **Message**: "This command can only be used in a server."
+  
+  **Solution**: Run the command in a server channel, not DMs
+</Accordion>
+
+<Accordion title="Configuration incomplete">
+  **Warning**: Feature enabled but not configured (e.g., no channel set)
+  
+  **Effect**: Users may see errors when trying to use the feature
+  
+  **Solution**: Click the feature in settings and complete required configuration
+</Accordion>
+
+---
+
+## Best Practices
+
+1. **Configure Before Enabling**: Set up feature-specific settings immediately after enabling
+
+2. **Required Fields**: Ensure required fields are set:
+   - Feeds: Notification channel
+   - Welcome: Welcome channel
+
+3. **Role Permissions**: Use role-based permissions for feeds to control who can subscribe
+
+4. **Test Features**: After configuration:
+   - Feeds: Try subscribing to a test feed
+   - Voice: Join a voice channel to verify tracking
+   - Welcome: Check preview of welcome card
+
+5. **Regular Review**: Periodically check settings to ensure they match current server needs
+
+---
+
+## Related Commands
+
+- [`/feed settings`](/commands/feed#feed-settings): Configure feed-specific settings
+- [`/voice settings`](/commands/voice#vc-settings): Configure voice tracking settings  
+- [`/welcome`](/commands/admin#welcome): Configure welcome card settings
+- [`/about`](/commands/admin#about): View bot information and statistics
+
+---
+
+## Technical Details
+
+### Controller Implementation
+
+Location: `src/bot/commands/settings.rs`
+
+**Key Components:**
+- `SettingsMainController`: Manages main settings view
+- `SettingsMainHandler`: Handles interactions and state
+- `SettingsMainState`: Tracks current mode (FeatureSettings or DeactivateFeatures)
+
+**State Management:**
+```rust
+enum SettingsMainState {
+    FeatureSettings,      // Configure features
+    DeactivateFeatures,   // Disable features
+}
+```
+
+**Actions:**
+```rust
+SettingsMainAction {
+    Feeds,           // Navigate to feed settings
+    Voice,           // Navigate to voice settings
+    Welcome,         // Navigate to welcome settings
+    AddFeatures,     // Enable selected features
+    ToggleState,     // Switch between modes
+    About,           // View bot info
+}
+```
