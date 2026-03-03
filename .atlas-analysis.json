@@ -1,0 +1,92 @@
+{
+  "projectType": "general",
+  "projectName": "pwr-bot",
+  "projectDescription": "Discord bot for tracking anime and manga updates with voice channel activity monitoring",
+  "theme": "almond",
+  "primaryColor": "#7289DA",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Setup",
+            "pages": [
+              "setup/discord",
+              "setup/docker",
+              "setup/manual",
+              "setup/configuration"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/feed-subscriptions",
+              "features/voice-tracking",
+              "features/commands"
+            ]
+          },
+          {
+            "group": "Commands",
+            "pages": [
+              "commands/feed",
+              "commands/voice",
+              "commands/settings",
+              "commands/admin"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/overview",
+              "development/architecture",
+              "development/database"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "development/adding-commands",
+              "development/adding-platforms",
+              "development/testing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Subscribe to anime and manga updates from AniList, MangaDex, and Comick",
+    "Track voice channel activity and view server-wide leaderboards",
+    "Receive notifications via Discord DMs or server channels",
+    "Lightning fast initialization (~0.3s) and lightweight binary (21.2 MB)",
+    "Self-hosted with Docker support and SQLite database"
+  ],
+  "publicApiSurface": [
+    "/feed subscribe - Subscribe to anime/manga series updates",
+    "/feed list - View your active subscriptions",
+    "/feed unsubscribe - Remove subscriptions",
+    "/feed settings - Configure feed notification preferences",
+    "/voice stats - View voice channel activity statistics",
+    "/voice leaderboard - Display server-wide voice activity rankings",
+    "/voice stats_chart - Generate visual statistics chart",
+    "/voice settings - Configure voice tracking preferences",
+    "/settings - Manage bot settings for your server",
+    "/about - Display bot information and statistics",
+    "/welcome - Configure server welcome messages"
+  ]
+}
